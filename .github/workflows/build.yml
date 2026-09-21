@@ -24,7 +24,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Build with PyInstaller
-        run: pyinstaller --onefile --name Bulletin main.py
+        run: pyinstaller --clean --onefile Bulletin.spec
 
       - name: Verify output
         run: |
