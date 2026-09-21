@@ -25,7 +25,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller --onefile --clean main.py
+          pyinstaller --onefile --clean --name Bulletin main.py
           Get-ChildItem -Recurse dist/
 
       - name: Verify output
