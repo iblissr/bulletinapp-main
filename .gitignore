@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyc
+*.egg-info/
+
+# Build (le CI génère le vrai .exe sur Windows)
+build/
+dist/
+Bulletin.exe
+
+# Version lock files
+=2.4
+=4.0
+
+# Excel data files
+bulletin excel/
+*.xlsx
+
+# Data / backups
+data/
+
+# Office temp files
+~$*.xlsm
+
+# Env
+.env
+venv/
+.venv/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Downloaded packages
+*.deb
+*.tar.xz
+*.zip
