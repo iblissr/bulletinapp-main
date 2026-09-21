@@ -26,3 +26,4 @@ Application de gestion de bulletins scolaires avec PyQt6.
 - Built on Linux using mingw-w64 cross-compiler
 - Windows bootloader: `/home/iblis/.local/lib/python3.14/site-packages/PyInstaller/bootloader/Windows-64bit-intel/run.exe`
 - Cross-compiler: `/home/iblis/.local/mingw/usr/bin/x86_64-w64-mingw32-gcc-win32`
+# Bulletin Premium
