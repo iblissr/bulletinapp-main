@@ -1,0 +1,90 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Windows x86_64
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: x86_64-pc-windows-msvc
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            bulletin-rs/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install system dependencies
+        run: |
+          choco install llvm -y --version 17.0.6 2>$null || true
+          $env:Path += ";C:\Program Files\LLVM\bin"
+
+      - name: Build bulletin-app (release)
+        working-directory: ./bulletin-rs
+        run: |
+          cargo build --release -p bulletin-app
+
+      - name: Verify executable
+        working-directory: ./bulletin-rs
+        run: |
+          ls -la target/release/bulletin-app.exe
+          ./target/release/bulletin-app.exe --version || true
+
+      - name: Create release archive
+        working-directory: ./bulletin-rs
+        run: |
+          mkdir -p dist
+          cp target/release/bulletin-app.exe dist/bulletin-windows-x86_64.exe
+          # Copy required data files if any
+          # The app uses relative paths for databases, so no extra files needed
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bulletin-windows-x86_64
+          path: bulletin-rs/dist/bulletin-windows-x86_64.exe
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v${{ github.run_number }}
+          name: "Bulletin v${{ github.run_number }} - Windows x86_64"
+          body: |
+            Build automatique depuis le commit ${{ github.sha }}
+            
+            **Fichier :** `bulletin-windows-x86_64.exe` (standalone, sans dépendances)
+            
+            **Utilisation :**
+            1. Téléchargez `bulletin-windows-x86_64.exe`
+            2. Placez-le dans un dossier (ex: `C:\Bulletin\`)
+            3. Lancez l'exécutable — il créera automatiquement les dossiers `COLLEGE/` et `LYCEE/` à côté
+          draft: false
+          prerelease: false
+          files: bulletin-rs/dist/bulletin-windows-x86_64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
