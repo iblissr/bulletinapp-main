@@ -1,12 +1,12 @@
 @echo off
 REM ============================================================
-REM  Bulletin Premium — Build pour Windows (One-file .exe)
-REM  Usage : build.bat [clean]
+REM  Bulletin Premium — Build pour Windows
+REM  Usage :双击 build.bat  ou  build.bat [clean]
 REM ============================================================
 title Building Bulletin Premium...
 
 echo.
-echo 1/4 — Installation des dependances...
+echo 1/3 — Installation des dépendances…
 pip install -r requirements.txt
 if %errorlevel% neq 0 (
     echo ERREUR : pip install a echoue.
@@ -15,21 +15,15 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo 2/4 — Verification des donnees Windows PyQt6...
-REM Copier les DLLs Windows si disponibles
-if exist "C:\Python313\PyQt6\Qt6\bin" (
-    xcopy "C:\Python313\PyQt6\Qt6\bin\*.dll" "dist\Bulletin\PyQt6\Qt6\bin\" /Y /Q 2>nul
-)
-
-echo.
-echo 3/4 — Nettoyage des anciens builds...
+echo 2/3 — Nettoyage des anciens builds…
 if /I "%1"=="clean" (
-    if exist dist rmdir /s /q dist
-    if exist build rmdir /s /q build
+    if exist dist\Bulletin rmdir /s /q dist\Bulletin
+    if exist build\Bulletin rmdir /s /q build\Bulletin
+    if exist Bulletin.spec del /q Bulletin.spec
 )
 
 echo.
-echo 4/4 — Compilation avec PyInstaller...
+echo 3/3 — Compilation avec PyInstaller…
 pyinstaller Bulletin.spec
 
 if %errorlevel% neq 0 (

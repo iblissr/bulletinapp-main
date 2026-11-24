@@ -1,0 +1,18 @@
+[package]
+name = "bulletin-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Application desktop Bulletin — UI native Slint"
+
+[dependencies]
+bulletin-core = { path = "../bulletin-core" }
+anyhow.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rfd.workspace = true
+slint.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true

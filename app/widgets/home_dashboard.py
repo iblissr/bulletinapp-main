@@ -713,6 +713,17 @@ class HomeDashboardWidget(QWidget):
         self.db = db
         if self._cards_layout.count() > 1:
             self._rebuild_visible_cards()
+        self._sync_config_panel_to_db(db)
+
+    def _sync_config_panel_to_db(self, db: Database) -> None:
+        """Synchronise le panel de configuration avec la DB active."""
+        if not hasattr(self, '_config_panel') or self._config_panel is None:
+            return
+        db_path = str(getattr(db, 'path', ''))
+        for c in self._config_panel._classes:
+            if str(c.db_path) == db_path:
+                self._config_panel._select_class(c)
+                return
 
     def _open_class_db(self, info: ClassInfo) -> Optional[Database]:
         """Ouvre la DB de la classe info, ou None si indisponible.
@@ -889,13 +900,13 @@ class HomeDashboardWidget(QWidget):
         """Construit le panel de configuration de classe dans l'onglet Configuration."""
         from .class_config_panel import ClassConfigPanel
 
-        config_panel = ClassConfigPanel(db=self.db)
-        config_panel.setObjectName("ClassConfigPanel")
-        config_panel.setStyleSheet("""
+        self._config_panel = ClassConfigPanel(db=self.db)
+        self._config_panel.setObjectName("ClassConfigPanel")
+        self._config_panel.setStyleSheet("""
             #ClassConfigPanel {
                 margin: 16px;
                 background-color: palette(window);
                 border-radius: 8px;
             }
         """)
-        parent_layout.addWidget(config_panel)
+        parent_layout.addWidget(self._config_panel)

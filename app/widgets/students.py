@@ -252,17 +252,21 @@ class StudentsWidget(QWidget):
         existing = {s["num"] for s in self.db.list_students()}
         skipped = len([i for i in range(1, n + 1) if i in existing])
         added = 0
+        errors = 0
         for i in range(1, n + 1):
             if i not in existing:
-                self.db.add_student(i, f"Élève {i}")
-                added += 1
-        # Feedback clair : on indique les ajoutés ET les déjà existants
+                try:
+                    self.db.add_student(i, f"Élève {i}")
+                    added += 1
+                except ValueError:
+                    errors += 1
         from .common import show_toast
         msg = f"{added} élève(s) ajouté(s)"
         if skipped:
             msg += f", {skipped} déjà présent(s) (ignorés)"
-        # Bulletin premium : toast au lieu de QMessageBox
-        kind = "success" if added and not skipped else "warning" if skipped else "info"
+        if errors:
+            msg += f", {errors} doublon(s) de nom ignoré(s)"
+        kind = "success" if added and not skipped and not errors else "warning" if skipped or errors else "info"
         show_toast(self, msg, kind=kind)
         self.refresh()
         self.changed.emit()
@@ -344,43 +348,50 @@ class StudentsWidget(QWidget):
 
     def _save(self) -> None:
         updated = 0
+        errors: list[str] = []
         for r in range(self.table.rowCount()):
             it0 = self.table.item(r, 0)
             if not it0:
                 continue
             sid = it0.data(Qt.ItemDataRole.UserRole)
-            if not sid:
-                # nouvelle ligne
-                try:
-                    num = int(it0.text())
-                except ValueError:
-                    continue
-                nom = self.table.item(r, 2).text() if self.table.item(r, 2) else ""
-                prenoms = self.table.item(r, 3).text() if self.table.item(r, 3) else ""
-                self.db.add_student(
-                    num, nom, prenoms,
-                    matricule=self.table.item(r, 1).text() if self.table.item(r, 1) else "",
-                    genre=self.table.item(r, 4).text() if self.table.item(r, 4) else "",
-                    naissance=self.table.item(r, 5).text() if self.table.item(r, 5) else "",
-                )
-                updated += 1
-            else:
-                try:
-                    num = int(it0.text())
-                except ValueError:
-                    continue
-                self.db.update_student(
-                    sid,
-                    num=num,
-                    matricule=self.table.item(r, 1).text() if self.table.item(r, 1) else "",
-                    nom=self.table.item(r, 2).text() if self.table.item(r, 2) else "",
-                    prenoms=self.table.item(r, 3).text() if self.table.item(r, 3) else "",
-                    genre=self.table.item(r, 4).text() if self.table.item(r, 4) else "",
-                    naissance=self.table.item(r, 5).text() if self.table.item(r, 5) else "",
-                )
-                updated += 1
+            try:
+                if not sid:
+                    # nouvelle ligne
+                    try:
+                        num = int(it0.text())
+                    except ValueError:
+                        continue
+                    nom = self.table.item(r, 2).text() if self.table.item(r, 2) else ""
+                    prenoms = self.table.item(r, 3).text() if self.table.item(r, 3) else ""
+                    self.db.add_student(
+                        num, nom, prenoms,
+                        matricule=self.table.item(r, 1).text() if self.table.item(r, 1) else "",
+                        genre=self.table.item(r, 4).text() if self.table.item(r, 4) else "",
+                        naissance=self.table.item(r, 5).text() if self.table.item(r, 5) else "",
+                    )
+                    updated += 1
+                else:
+                    try:
+                        num = int(it0.text())
+                    except ValueError:
+                        continue
+                    self.db.update_student(
+                        sid,
+                        num=num,
+                        matricule=self.table.item(r, 1).text() if self.table.item(r, 1) else "",
+                        nom=self.table.item(r, 2).text() if self.table.item(r, 2) else "",
+                        prenoms=self.table.item(r, 3).text() if self.table.item(r, 3) else "",
+                        genre=self.table.item(r, 4).text() if self.table.item(r, 4) else "",
+                        naissance=self.table.item(r, 5).text() if self.table.item(r, 5) else "",
+                    )
+                    updated += 1
+            except ValueError as exc:
+                errors.append(str(exc))
         from .common import show_toast
-        show_toast(self, f"{updated} ligne(s) enregistrée(s)", kind="success")
+        if errors:
+            show_toast(self, "; ".join(errors), kind="error")
+        if updated:
+            show_toast(self, f"{updated} ligne(s) enregistrée(s)", kind="success")
         self.refresh()
         self.changed.emit()
 

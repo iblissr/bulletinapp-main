@@ -64,6 +64,7 @@ from .subjects_catalog import (
     SectionDef,
     expand_pattern,
     list_sections,
+    subject_allowed_for_level,
 )
 
 import qtawesome as qta
@@ -90,6 +91,10 @@ class ClassDraft:
     classes: list[dict] = field(default_factory=list)
     # Matières sélectionnées (avec coefficients ajustés)
     subjects: list[tuple[str, float]] = field(default_factory=list)
+    # Coefficients affichés à l'étape « Matières » (valeurs non
+    # retouchées) : servent à détecter, à l'étape « Coefficients »,
+    # celles que l'utilisateur a réellement modifiées.
+    subjects_initial: dict[str, float] = field(default_factory=dict)
     # Élèves (par sous-classe, indexé par num)
     students_by_class: dict[str, list[dict]] = field(default_factory=dict)
     # Paramètres globaux (collectés dans _ClassDetailsPage)
@@ -435,16 +440,35 @@ class _SubjectsPage(QWizardPage):
         if self._checkboxes:
             return
         section = SECTIONS[self.draft.section_key]
+        # Coefficients recommandés : ceux du tableau de la (première)
+        # classe créée — les autres classes sont corrigées à la création.
+        ref_class = ""
+        if self.draft.classes:
+            ref_class = self.draft.classes[0].get("folder_name", "")
         for name, coeff in section.subjects:
-            cb = QCheckBox(f"{name}    (coeff. recommandé : {coeff:g})")
+            if not subject_allowed_for_level(name, self.draft.level_key):
+                continue
+            recommended = db_module.class_default_coeff(
+                name, ref_class, self.draft.level_key
+            )
+            if recommended is None:
+                recommended = float(coeff)
+            cb = QCheckBox(f"{name}    (coeff. recommandé : {recommended:g})")
             cb.setChecked(True)
             cb.setProperty("_subject_name", name)
-            cb.setProperty("_subject_coeff", float(coeff))
+            cb.setProperty("_subject_coeff", float(recommended))
             self.scroll_layout.addWidget(cb)
             self._checkboxes.append(cb)
         self.scroll_layout.addStretch()
 
     def validatePage(self) -> bool:
+        # Un retour en arrière peut laisser des cases obsolètes (ex:
+        # Philosophie cochée en 1ère puis niveau changé en 2nde) :
+        # on décoche ce qui n'est pas autorisé pour le niveau actuel.
+        for cb in self._checkboxes:
+            name = cb.property("_subject_name")
+            if not subject_allowed_for_level(name, self.draft.level_key):
+                cb.setChecked(False)
         if not any(cb.isChecked() for cb in self._checkboxes):
             QMessageBox.warning(self, "Matières",
                                 "Sélectionnez au moins une matière.")
@@ -456,6 +480,11 @@ class _SubjectsPage(QWizardPage):
             )
             for cb in self._checkboxes if cb.isChecked()
         ]
+        # Mémorise les valeurs proposées pour n'appliquer le tableau
+        # par classe qu'aux coefficients non retouchés ensuite.
+        self.draft.subjects_initial = {
+            name: coeff for name, coeff in self.draft.subjects
+        }
         return True
 
 
@@ -696,6 +725,32 @@ class ClassWizard(QWizard):
 # ---------------------------------------------------------------------------
 #  Création physique du workspace
 # ---------------------------------------------------------------------------
+def _subjects_for_class(
+    draft: ClassDraft, folder_name: str
+) -> list[tuple[str, float]]:
+    """Matières du draft avec les coefficients propres à *folder_name*.
+
+    Seules les valeurs laissées telles quelles à l'étape « Coefficients »
+    (comparées à ``draft.subjects_initial``) sont remplacées par le
+    tableau de la classe : une saisie explicite de l'utilisateur prime.
+    """
+    initial = getattr(draft, "subjects_initial", None) or {}
+    out: list[tuple[str, float]] = []
+    for name, coeff in draft.subjects:
+        # Règle du niveau (ex: pas de Philosophie en Collège/2nde),
+        # même si la liste des matières vient d'un niveau précédent.
+        if not subject_allowed_for_level(name, draft.level_key):
+            continue
+        if float(initial.get(name, coeff)) == float(coeff):
+            default = db_module.class_default_coeff(
+                name, folder_name, draft.level_key
+            )
+            if default is not None:
+                coeff = default
+        out.append((name, coeff))
+    return out
+
+
 def create_workspaces_from_draft(draft: ClassDraft) -> list[str]:
     """Crée les dossiers + bases SQLite + fichiers .xlsx vides.
 
@@ -735,12 +790,13 @@ def create_workspaces_from_draft(draft: ClassDraft) -> list[str]:
         d.set_setting("prof_principal", c["prof"])
         d.set_setting("section", section.label)
         d.set_setting("niveau", draft.level_key)
-        # Reseed les matières avec coefficients + enseignants
-        # (clear_subjects au préalable pour éviter le doublon avec
-        # l'auto-seed de Database._init_defaults)
+        # Reseed les matières avec coefficients + enseignants.
+        # Les valeurs non retouchées à l'étape « Coefficients » sont
+        # remplacées par le tableau spécifique à CETTE classe.
+        class_subjects = _subjects_for_class(draft, c["folder_name"])
         subjects_rows = [
             (name, coeff, teachers.get(name, ""))
-            for name, coeff in draft.subjects
+            for name, coeff in class_subjects
         ]
         d.set_subjects(subjects_rows)
         # Importe les élèves
@@ -755,7 +811,9 @@ def create_workspaces_from_draft(draft: ClassDraft) -> list[str]:
             d.bulk_update_students(rows)
         d.close()
         # Génère des fichiers .xlsx vides pour chaque matière
-        _create_blank_subject_xlsx(folder, section, draft, c)
+        _create_blank_subject_xlsx(
+            folder, section, draft, c, subjects=class_subjects
+        )
         created.append(c["folder_name"])
     return created
 
@@ -765,6 +823,7 @@ def _create_blank_subject_xlsx(
     section: SectionDef,
     draft: ClassDraft,
     class_info: dict,
+    subjects: Optional[list[tuple[str, float]]] = None,
 ) -> None:
     """Crée un fichier ``<Matière>.xlsx`` vide pour chaque matière.
 
@@ -777,9 +836,12 @@ def _create_blank_subject_xlsx(
 
     students = draft.students_by_class.get(class_info["folder_name"], [])
     teachers = getattr(draft, "_teachers", {}) or {}
+    if subjects is None:
+        subjects = draft.subjects
 
-    # Les matières = celles qui ont été retenues
-    for name, coeff in draft.subjects:
+    # Les matières = celles qui ont été retenues, avec les
+    # coefficients propres à cette classe (cellule C4)
+    for name, coeff in subjects:
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Sheet1"

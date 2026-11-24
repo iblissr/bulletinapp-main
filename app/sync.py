@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from .db import Database
-from .workspace import ClassInfo, _normalize
+from .workspace import ClassInfo, _normalize, _get_subject_aliases
 
 
 log = logging.getLogger(__name__)
@@ -470,7 +470,13 @@ def sync_all_subjects(
 
     for subj in db.list_subjects():
         name = subj["name"]
-        path = xlsx_by_norm.get(_normalize(name))
+        norm_name = _normalize(name)
+        aliases = _get_subject_aliases(norm_name)
+        path = None
+        for alias in aliases:
+            if alias in xlsx_by_norm:
+                path = xlsx_by_norm[alias]
+                break
         if path is None:
             report.subjects.append(SubjectSyncResult(
                 subject_name=name, xlsx_path=None, matched=False,

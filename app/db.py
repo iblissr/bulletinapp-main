@@ -84,13 +84,8 @@ DEFAULT_SETTINGS = {
     "export_cr_path": "",
 }
 
-# Coefficients par défaut par classe, lus depuis les fichiers .xlsx (C4)
-# dans /mnt/sda3/BULLETIN/BULLETIN/BULLETIN/.
-# Chaque classe a ses propres coefficients. Philosophie n'est présent
-# que pour les classes du Lycée (2ndeI/2ndeII l'ont aussi mais à coeff. 0).
-
-# Collège : 9 matières (pas de Philosophie)
-COEFFS_COLLEGE = [
+# 10 matières par défaut (filière Collège du modèle Excel)
+DEFAULT_SUBJECTS = [
     ("Malagasy", 3, ""),
     ("Français", 3, ""),
     ("Anglais", 2, ""),
@@ -99,85 +94,257 @@ COEFFS_COLLEGE = [
     ("Physique-chimie", 3, ""),
     ("SVT", 3, ""),
     ("EPS", 1, ""),
-    ("EVA", 1, ""),
+    ("Éducation à la Vie", 1, ""),
     ("Religion", 1, ""),
 ]
 
-# Lycée — groupe 1 : 1ère L, TAI
+
+# ---------------------------------------------------------------------------
+#  Coefficients par défaut, PAR CLASSE
+# ---------------------------------------------------------------------------
+# Source de vérité : ``memory/decisions/coefficients-par-classe.md``
+# (lus en cellule **C4** des .xlsx des 17 classes le 2026-09-20).
+# Chaque classe a SES coefficients : les listes ci-dessous sont les
+# « groupes » du tableau, combinés par :func:`get_class_defaults`.
+#
+#   Groupe      Classes                         Particularité
+#   ----------  ------------------------------  ----------------------------
+#   COLLEGE     3EME1, 3EME2, 4EME1             Physique-chimie = 3
+#   COLLEGE     4EME2, 5EME1/2, 6EME1/2/3       Physique-chimie = 2
+#   LYCEE_G1    1EREL1, 1EREL2, TA1, TA2        Philosophie 2 (4 en TA)
+#   LYCEE_G2    1ERES, TD                       Maths/PC/SVT = 4
+#   LYCEE_G3    2NDE1, 2NDE2                    pas de Philosophie
+#
+# Philosophie n'existe qu'au Lycée (1ère, Terminale) : jamais au Collège,
+# jamais en 2nde — voir LEVEL_SUBJECT_RESTRICTIONS.
+
+# Collège — Physique-chimie = 3 (3EME1, 3EME2, 4EME1)
+COEFFS_COLLEGE = [
+    ("Religion", 1, ""),
+    ("Éducation à la Vie", 1, ""),
+    ("Malagasy", 3, ""),
+    ("Français", 3, ""),
+    ("Anglais", 2, ""),
+    ("Histoire-Géographie", 3, ""),
+    ("Mathématiques", 3, ""),
+    ("SVT", 3, ""),
+    ("Physique-chimie", 3, ""),
+    ("EPS", 1, ""),
+]
+
+# Lycée — groupe 1 : 1ère L (1EREL1, 1EREL2) + TAI/TAII
+# Philosophie = 2 ici ; portée à 4 pour TA1/TA2 par
+# ``CLASS_COEFF_OVERRIDES`` (« TA » → philosophie : 4.0).
 COEFFS_LYCEE_G1 = [
+    ("Religion", 1, ""),
+    ("Éducation à la Vie", 1, ""),
     ("Malagasy", 4, ""),
     ("Français", 3, ""),
     ("Anglais", 2, ""),
-    ("Philosophie", 2, ""),
     ("Histoire-Géographie", 4, ""),
     ("Mathématiques", 2, ""),
-    ("Physique-chimie", 2, ""),
     ("SVT", 2, ""),
+    ("Physique-chimie", 2, ""),
     ("EPS", 1, ""),
-    ("EVA", 1, ""),
-    ("Religion", 1, ""),
+    ("Philosophie", 2, ""),
 ]
 
-# Lycée — groupe 2 : 1ère S, TD
+# Lycée — groupe 2 : 1ère S (1ERES) et TD (groupe scientifique)
 COEFFS_LYCEE_G2 = [
+    ("Religion", 1, ""),
+    ("Éducation à la Vie", 1, ""),
     ("Malagasy", 3, ""),
     ("Français", 2, ""),
     ("Anglais", 1, ""),
-    ("Philosophie", 2, ""),
     ("Histoire-Géographie", 2, ""),
     ("Mathématiques", 4, ""),
-    ("Physique-chimie", 4, ""),
     ("SVT", 4, ""),
+    ("Physique-chimie", 4, ""),
     ("EPS", 1, ""),
-    ("EVA", 1, ""),
-    ("Religion", 1, ""),
+    ("Philosophie", 2, ""),
 ]
 
-# Lycée — groupe 3 : 2nde (pas de Philosophie)
+# Lycée — groupe 3 : 2nde (2NDE1, 2NDE2) — pas de Philosophie
 COEFFS_LYCEE_G3 = [
+    ("Religion", 1, ""),
+    ("Éducation à la Vie", 1, ""),
     ("Malagasy", 3, ""),
     ("Français", 3, ""),
     ("Anglais", 2, ""),
     ("Histoire-Géographie", 3, ""),
     ("Mathématiques", 3, ""),
-    ("Physique-chimie", 3, ""),
     ("SVT", 3, ""),
+    ("Physique-chimie", 3, ""),
     ("EPS", 1, ""),
-    ("EVA", 1, ""),
-    ("Religion", 1, ""),
 ]
 
-# Mapping division/level → coefficients
-CLASS_DEFAULTS: dict[str, list[tuple[str, float, str]]] = {
-    "COLLEGE": COEFFS_COLLEGE,
-    "LYCEE_G1": COEFFS_LYCEE_G1,
-    "LYCEE_G2": COEFFS_LYCEE_G2,
-    "LYCEE_G3": COEFFS_LYCEE_G3,
-}
+# Niveaux Primaire / Maternelle : matières reprises telles quelles
+# dans le catalogue de la section (pas de tableau « par classe »).
+_PRIM_LEVELS = ("CP", "CE1", "CE2", "CM1", "CM2")
+_MATER_LEVELS = ("PS", "MS", "GS")
 
-# Noms de dossiers par groupe pour inférence
-LYCEE_G1_CLASSES = {"1ERELI", "1ERELII", "TAI", "TAII"}
-LYCEE_G2_CLASSES = {"1ERES", "TD"}
-LYCEE_G3_CLASSES = {"2NDEI", "2NDEII"}
+_ROMAN_VALUES = {"I": 1, "V": 5, "X": 10}
+
+# Version du tableau de coefficients appliqué aux bases existantes.
+COEFF_DEFAULTS_VERSION = "2026-09-20"
 
 
-def _get_class_defaults(class_name: str) -> list[tuple[str, float, str]]:
-    """Retourne la liste des matières par défaut pour une classe donnée."""
-    normalized = class_name.strip().upper()
-    # Lycée groupe 2 : 1ère S, TD (coeff forts en Maths/Physique/SVT)
-    if normalized in LYCEE_G2_CLASSES:
-        return CLASS_DEFAULTS["LYCEE_G2"]
-    # Lycée groupe 1 : 1ère L, TAI (coeff équilibrés)
-    if normalized.startswith("1ERE") or normalized in ("TAI", "TAII"):
-        return CLASS_DEFAULTS["LYCEE_G1"]
-    # Lycée groupe 3 : 2nde (pas de Philosophie)
-    if normalized.startswith("2NDE"):
-        return CLASS_DEFAULTS["LYCEE_G3"]
-    # Collège : 3EME-6EME
-    if normalized.startswith(("3EME", "4EME", "5EME", "6EME")):
-        return CLASS_DEFAULTS["COLLEGE"]
-    # Fallback : Collège par défaut
-    return CLASS_DEFAULTS["COLLEGE"]
+def _subclass_index(suffix: str) -> int:
+    """Numéro de sous-classe : ``"2"`` → 2, ``"II"`` → 2, ``""`` → 1."""
+    s = (suffix or "").strip().upper()
+    if not s:
+        return 1
+    if s.isdigit():
+        return int(s)
+    total = 0
+    prev = 0
+    for ch in reversed(s):
+        v = _ROMAN_VALUES.get(ch)
+        if v is None:
+            return 1  # suffixe non reconnu (A, B…) → première classe
+        total += -v if v < prev else v
+        prev = max(prev, v)
+    return total or 1
+
+
+def _section_subjects(section_key: str) -> list[tuple[str, float, str]]:
+    """Matières ``(nom, coeff, prof)`` d'une section du catalogue."""
+    from .wizards.subjects_catalog import SECTIONS  # local : cycle Qt
+
+    section = SECTIONS.get(section_key)
+    if section is None:
+        return []
+    return [(name, float(coeff), "") for name, coeff in section.subjects]
+
+
+def _college_subjects(class_name: str, level_key: str) -> list[tuple[str, float, str]]:
+    """Collège : Physique-chimie = 3 en 3EME1/3EME2/4EME1, **2** ailleurs
+    (4EME2 → 6EME3). Voir le tableau de la décision.
+    """
+    if level_key in ("5EME", "6EME"):
+        pc = 2.0
+    elif level_key == "4EME":
+        suffix = class_name.strip().upper()[len(level_key):]
+        pc = 3.0 if _subclass_index(suffix) == 1 else 2.0
+    else:  # 3EME (et repli)
+        pc = 3.0
+    if pc == 3.0:
+        return COEFFS_COLLEGE
+    return [
+        (name, pc if name == "Physique-chimie" else coeff, teacher)
+        for name, coeff, teacher in COEFFS_COLLEGE
+    ]
+
+
+def _first_year_group(class_name: str) -> list[tuple[str, float, str]]:
+    """1ère : groupe scientifique (S) ou littéraire/TA (défaut)."""
+    name = class_name.strip().upper()
+    suffix = name[4:] if name.startswith("1ERE") else name[1:]
+    return COEFFS_LYCEE_G2 if suffix.startswith("S") else COEFFS_LYCEE_G1
+
+
+def get_class_defaults(
+    class_name: str, level_key: str | None = None
+) -> list[tuple[str, float, str]]:
+    """Matières et coefficients **par défaut** d'une classe.
+
+    Retourne une liste de ``(nom, coefficient, professeur)`` selon le
+    tableau de ``memory/decisions/coefficients-par-classe.md``.
+
+    ``level_key`` (ex. ``"6EME"``, ``"TLE"``) peut être fourni pour
+    éviter de le recalculer ; sinon il est déduit de *class_name*.
+
+    >>> get_class_defaults("TA1")[10]         # Philosophie
+    ('Philosophie', 4.0, '')
+    >>> [c for n, c, _ in get_class_defaults("6EME3")
+    ...  if n == "Physique-chimie"]
+    [2.0]
+    """
+    from .workspace import extract_level_key, normalize_class_name
+    from .wizards.subjects_catalog import get_class_coeff  # local : cycle Qt
+
+    raw = str(class_name or "")
+    name = normalize_class_name(raw) or raw.strip().upper()
+    level = str(level_key or extract_level_key(raw)).strip().upper()
+
+    if level == "2NDE":
+        base = COEFFS_LYCEE_G3
+    elif level == "1ERE":
+        base = _first_year_group(name)
+    elif level == "TLE":
+        # TD → groupe scientifique, TAI/TAII et le reste → groupe 1
+        base = COEFFS_LYCEE_G2 if name.startswith("TD") else COEFFS_LYCEE_G1
+    elif level in ("3EME", "4EME", "5EME", "6EME"):
+        base = _college_subjects(name, level)
+    elif level in _PRIM_LEVELS:
+        base = _section_subjects("PRIM")
+    elif level in _MATER_LEVELS:
+        base = _section_subjects("MATER")
+    else:
+        base = COEFFS_COLLEGE  # niveau inconnu → repli Collège
+
+    # Surcharges du catalogue (ex: Philosophie 4 en TAI/TAII)
+    return [
+        (name_, get_class_coeff(name_, raw, coeff), teacher)
+        for name_, coeff, teacher in base
+    ]
+
+
+def _subject_aliases(name: str) -> list[str]:
+    """Tous les noms normalisés possibles d'une matière (avec alias)."""
+    from .workspace import _get_subject_aliases, _normalize
+
+    return _get_subject_aliases(_normalize(name))
+
+
+def _defaults_by_norm(
+    class_name: str, level_key: str | None = None
+) -> dict[str, float]:
+    """``{nom_normalisé_ou_alias: coefficient}`` pour une classe."""
+    out: dict[str, float] = {}
+    for name, coeff, _teacher in get_class_defaults(class_name, level_key):
+        for alias in _subject_aliases(name):
+            out.setdefault(alias, coeff)
+    return out
+
+
+def class_default_coeff(
+    subject_name: str, class_name: str, level_key: str | None = None
+) -> float | None:
+    """Coefficient par défaut de *subject_name* pour *class_name*.
+
+    Retourne ``None`` si la matière n'existe pas dans le tableau de
+    la classe. Les alias (``Histo-geo`` ↔ ``Histoire-Géographie``,
+    ``EVA`` ↔ ``Éducation à la Vie``) sont pris en compte.
+    """
+    defaults = _defaults_by_norm(class_name, level_key)
+    for alias in _subject_aliases(subject_name):
+        if alias in defaults:
+            return defaults[alias]
+    return None
+
+
+def _apply_class_coeff_defaults(cur: sqlite3.Cursor, class_name: str) -> int:
+    """Réécrit les coefficients de *class_name* depuis le tableau.
+
+    Les matières absentes du tableau (ajoutées à la main) sont
+    laissées telles quelles. Retourne le nombre de mises à jour.
+    """
+    defaults = _defaults_by_norm(class_name)
+    if not defaults:
+        return 0
+    updated = 0
+    for row in cur.execute("SELECT id, name, coeff FROM subjects").fetchall():
+        target = None
+        for alias in _subject_aliases(row["name"]):
+            if alias in defaults:
+                target = defaults[alias]
+                break
+        if target is None or float(row["coeff"] or 0.0) == target:
+            continue
+        cur.execute("UPDATE subjects SET coeff=? WHERE id=?", (target, row["id"]))
+        updated += 1
+    return updated
 
 
 class Database:
@@ -235,82 +402,114 @@ class Database:
                         )
                 except Exception:
                     pass
+            # --- v1.2 : coefficients par classe (tableau 2026-09-20) ---
+            # Appliqué AVANT le seed : sur une base vide il n'y a rien à
+            # réécrire, et le seed garde ainsi la priorité aux .xlsx.
+            self._migrate_class_coefficients(cur)
+
+            # --- Seed des matières quand la table est vide ---
             cur.execute("SELECT COUNT(*) AS n FROM subjects")
             if cur.fetchone()["n"] == 0:
-                # Si le chemin de la DB pointe dans un dossier qui
-                # ressemble à un workspace de classe (contient des
-                # .xlsx de matières), on s'en sert pour pré-remplir
-                # les matières. Sinon on retombe sur la liste par
-                # défaut (11 matières Lycée).
-                from .workspace import _normalize
-                subjects_to_seed: list[tuple[str, float, str, int]] = []
-                cls = None
-                try:
-                    cls = discover_class_by_db_path(self.path)
-                except Exception:  # noqa: BLE001
-                    cls = None
-                if cls is not None:
-                    # Pré-remplissage des matières avec leurs coefficients
-                    # 1) À partir des .xlsx dans le dossier classe
-                    # 2) À défaut, depuis le cache "bulletin excel/"
-                    from .workspace import (
-                        read_coefficient_from_xlsx,
-                        get_bulletin_excel_coeff,
-                    )
-
-                    subject_map: dict[str, float] = {}
-
-                    # Sources candidates : d'abord le dossier classe
-                    for p in cls.subject_files:
-                        norm = _normalize(p.stem)
-                        if norm not in subject_map:
-                            coeff = read_coefficient_from_xlsx(p)
-                            if coeff is not None:
-                                subject_map[norm] = coeff
-
-                    # Si le dossier classe n'a pas de coefficients
-                    # dans les .xlsx, on cherche dans le cache
-                    # "bulletin excel"
-                    if not subject_map and cls.db_path:
-                        class_defaults = _get_class_defaults(cls.name)
-                        for subj_name, _coeff, _teacher in class_defaults:
-                            coeff = get_bulletin_excel_coeff(
-                                cls.name, subj_name
-                            )
-                            if coeff is not None:
-                                subject_map[_normalize(subj_name)] = coeff
-
-                    # On garde l'ordre des defaults par classe,
-                    # en utilisant les coefficients du bulletin
-                    # excel quand disponibles, et les coefficients
-                    # par défaut pour les autres.
-                    class_defaults = _get_class_defaults(cls.name)
-                    for subj_name, default_coeff, _teacher in class_defaults:
-                        norm = _normalize(subj_name)
-                        coeff = subject_map.get(norm, default_coeff)
-                        subjects_to_seed.append(
-                            (subj_name, coeff, "", len(subjects_to_seed))
-                        )
-                else:
-                    for i, (name, coeff, teacher) in enumerate(
-                        CLASS_DEFAULTS["COLLEGE"]
-                    ):
-                        subjects_to_seed.append((name, coeff, teacher, i))
-                for name, coeff, teacher, pos in subjects_to_seed:
+                for name, coeff, teacher, pos in self._default_subject_rows():
                     cur.execute(
                         "INSERT INTO subjects(name,coeff,teacher,position) "
                         "VALUES(?,?,?,?)",
                         (name, coeff, teacher, pos),
                     )
+            # Filet de sécurité : ne laisse jamais une base sans matière
             cur.execute("SELECT COUNT(*) AS n FROM subjects")
             if cur.fetchone()["n"] == 0:
-                for i, (name, coeff, teacher) in enumerate(
-                    CLASS_DEFAULTS["COLLEGE"]
-                ):
+                for i, (name, coeff, teacher) in enumerate(DEFAULT_SUBJECTS):
                     cur.execute(
                         "INSERT INTO subjects(name,coeff,teacher,position) VALUES (?,?,?,?)",
                         (name, coeff, teacher, i),
                     )
+
+    def _migrate_class_coefficients(self, cur: sqlite3.Cursor) -> None:
+        """Réécrit les coefficients d'une base existante depuis le tableau.
+
+        Une seule fois par base (drapeau ``coeff_defaults_version`` dans
+        ``settings``). Les bases dont le dossier de classe n'est pas
+        détectable sont revérifiées à la prochaine ouverture.
+        """
+        cur.execute(
+            "SELECT value FROM settings WHERE key='coeff_defaults_version'"
+        )
+        row = cur.fetchone()
+        if row is not None and row["value"] == COEFF_DEFAULTS_VERSION:
+            return
+        try:
+            cls = discover_class_by_db_path(self.path)
+        except Exception:  # noqa: BLE001
+            cls = None
+        if cls is None:
+            return
+        _apply_class_coeff_defaults(cur, cls.name)
+        cur.execute(
+            "INSERT INTO settings(key,value) "
+            "VALUES('coeff_defaults_version',?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (COEFF_DEFAULTS_VERSION,),
+        )
+
+    def _default_subject_rows(self) -> list[tuple[str, float, str, int]]:
+        """Matières à grainer pour la base courante ``(nom, coeff, prof, pos)``.
+
+        Priorité des coefficients :
+        1. cellule **C4** des ``.xlsx`` du dossier classe
+        2. cache ``bulletin excel/``
+        3. tableau des coefficients de la classe (:func:`get_class_defaults`)
+        """
+        from .workspace import (
+            extract_level_key,
+            get_bulletin_excel_coeff,
+            read_coefficient_from_xlsx,
+        )
+        from .wizards.subjects_catalog import subject_allowed_for_level
+
+        try:
+            cls = discover_class_by_db_path(self.path)
+        except Exception:  # noqa: BLE001
+            cls = None
+        if cls is None:
+            return [
+                (name, coeff, teacher, i)
+                for i, (name, coeff, teacher) in enumerate(DEFAULT_SUBJECTS)
+            ]
+
+        level_key = extract_level_key(cls.name)
+        defaults = get_class_defaults(cls.name, level_key)
+
+        # 1) coefficients lus dans les .xlsx du dossier classe
+        subject_map: dict[str, float] = {}
+        for p in cls.subject_files:
+            coeff = read_coefficient_from_xlsx(p)
+            if coeff is None:
+                continue
+            for alias in _subject_aliases(p.stem):
+                subject_map.setdefault(alias, coeff)
+
+        # 2) sinon le cache « bulletin excel/ »
+        if not subject_map and cls.db_path:
+            for name, _coeff, _teacher in defaults:
+                coeff = get_bulletin_excel_coeff(cls.name, name)
+                if coeff is None:
+                    continue
+                for alias in _subject_aliases(name):
+                    subject_map.setdefault(alias, coeff)
+
+        # 3) tableau de la classe, matières filtrées par niveau
+        rows: list[tuple[str, float, str, int]] = []
+        for name, default_coeff, _teacher in defaults:
+            if not subject_allowed_for_level(name, level_key):
+                continue
+            coeff = default_coeff
+            for alias in _subject_aliases(name):
+                if alias in subject_map:
+                    coeff = subject_map[alias]
+                    break
+            rows.append((name, coeff, "", len(rows)))
+        return rows
 
     # ------------------------------------------------------------------
     #  Settings
@@ -421,8 +620,37 @@ class Database:
             cur.execute("SELECT * FROM students ORDER BY num")
             return cur.fetchall()
 
+    def find_duplicate_name(self, nom: str, prenoms: str = "",
+                            exclude_id: int | None = None) -> sqlite3.Row | None:
+        """Cherche un élève avec le même nom et prénoms (insensible à la casse).
+
+        Retourne la première ligne trouvée, ou ``None`` si aucun doublon.
+        ``exclude_id`` permet d'exclure un ID (utile en modification).
+        """
+        with self.cursor() as cur:
+            if exclude_id:
+                cur.execute(
+                    "SELECT * FROM students "
+                    "WHERE LOWER(nom)=LOWER(?) AND LOWER(prenoms)=LOWER(?) "
+                    "AND id != ? LIMIT 1",
+                    (nom, prenoms, exclude_id),
+                )
+            else:
+                cur.execute(
+                    "SELECT * FROM students "
+                    "WHERE LOWER(nom)=LOWER(?) AND LOWER(prenoms)=LOWER(?) LIMIT 1",
+                    (nom, prenoms),
+                )
+            return cur.fetchone()
+
     def add_student(self, num: int, nom: str, prenoms: str = "",
                     matricule: str = "", genre: str = "", naissance: str = "") -> int:
+        dup = self.find_duplicate_name(nom, prenoms)
+        if dup is not None:
+            raise ValueError(
+                f"Un élève avec le même nom existe déjà : "
+                f"« {dup['nom']} {dup['prenoms']} » (N°{dup['num']})."
+            )
         with self.cursor() as cur:
             cur.execute(
                 "INSERT INTO students(num,matricule,nom,prenoms,genre,naissance) "
@@ -436,6 +664,22 @@ class Database:
     def update_student(self, sid: int, **kwargs) -> None:
         if not kwargs:
             return
+        nom = kwargs.get("nom")
+        prenoms = kwargs.get("prenoms")
+        if nom is not None or prenoms is not None:
+            # Recharger les valeurs actuelles pour les champs non fournis
+            with self.cursor() as cur:
+                cur.execute("SELECT nom, prenoms FROM students WHERE id=?", (sid,))
+                row = cur.fetchone()
+            if row:
+                final_nom = nom if nom is not None else row["nom"]
+                final_prenoms = prenoms if prenoms is not None else row["prenoms"]
+                dup = self.find_duplicate_name(final_nom, final_prenoms, exclude_id=sid)
+                if dup is not None:
+                    raise ValueError(
+                        f"Un autre élève porte déjà ce nom : "
+                        f"« {dup['nom']} {dup['prenoms']} » (N°{dup['num']})."
+                    )
         cols = ",".join(f"{k}=?" for k in kwargs)
         vals = list(kwargs.values()) + [sid]
         with self.cursor() as cur:
@@ -469,9 +713,45 @@ class Database:
         return added
 
     def bulk_update_students(self, rows: Iterable[dict]) -> None:
-        """rows = [{'num':1,'nom':'X','prenoms':'Y',...}, ...]"""
+        """rows = [{'num':1,'nom':'X','prenoms':'Y',...}, ...]
+
+        Lève ``ValueError`` si un doublon de nom est détecté.
+        """
+        rows_list = list(rows)
+        seen_names: set[tuple[str, str]] = set()
+        # Vérification sans ouvrir de curseur imbriqué
+        existing_map: dict[int, tuple[str, str]] = {}
         with self.cursor() as cur:
-            for r in rows:
+            cur.execute("SELECT num, nom, prenoms FROM students")
+            for row in cur.fetchall():
+                existing_map[int(row["num"])] = (row["nom"] or "", row["prenoms"] or "")
+        for r in rows_list:
+            nom = (r.get("nom") or "").strip()
+            prenoms = (r.get("prenoms") or "").strip()
+            if not nom:
+                continue
+            key = (nom.lower(), prenoms.lower())
+            if key in seen_names:
+                raise ValueError(
+                    f"Doublon détecté dans le fichier : "
+                    f"« {nom} {prenoms} » apparaît plusieurs fois."
+                )
+            seen_names.add(key)
+            existing_num = r.get("num")
+            if existing_num is not None:
+                existing_num = int(existing_num)
+                existing = existing_map.get(existing_num)
+                if existing is not None and (existing[0].lower(), existing[1].lower()) == key:
+                    continue
+            dup = self.find_duplicate_name(nom, prenoms)
+            if dup is not None:
+                raise ValueError(
+                    f"Un élève avec le même nom existe déjà dans la base : "
+                    f"« {dup['nom']} {dup['prenoms']} » (N°{dup['num']}). "
+                    f"Impossible d'ajouter « {nom} {prenoms} »."
+                )
+        with self.cursor() as cur:
+            for r in rows_list:
                 cur.execute(
                     "INSERT INTO students(num,matricule,nom,prenoms,genre,naissance) "
                     "VALUES(:num,:matricule,:nom,:prenoms,:genre,:naissance) "
@@ -940,12 +1220,35 @@ def discover_class_by_db_path(db_path: str | os.PathLike) -> object | None:
     for c in discover_classes():
         if os.path.normpath(str(c.db_path)).lower() == target:
             return c
-    # Cas de repli : on regarde si la DB est dans un dossier ``data/``
-    # d'un sous-dossier de COLLEGE/ ou LYCEE/.
+    # Cas de repli : la DB est dans un dossier ``data/`` d'une classe
+    # de COLLEGE/, LYCEE/ ou PRIMAIRE/.
     parts = Path(str(db_path)).resolve().parts
     for i, part in enumerate(parts):
-        if part in ("COLLEGE", "LYCEE") and i + 1 < len(parts):
+        if part in ("COLLEGE", "LYCEE", "PRIMAIRE") and i + 1 < len(parts):
             from .workspace import discover_class
             cls_name = parts[i + 1]
-            return discover_class(cls_name)
+            found = discover_class(cls_name)
+            if found is not None:
+                return found
+            # Dossier classe sans .xlsx ni sous-dossier bulletin/ :
+            # ``discover_classes()`` l'ignore, mais on peut quand même
+            # construire un ClassInfo (utile pour grainer / migrer).
+            folder = Path(*parts[: i + 2])
+            if folder.is_dir():
+                from .workspace import ClassInfo, prettify_class_name
+                xlsx_files = sorted(
+                    p for p in folder.glob("*.xlsx")
+                    if not p.name.startswith("~$")
+                )
+                return ClassInfo(
+                    name=cls_name,
+                    display_name=prettify_class_name(cls_name),
+                    division=part,
+                    folder=folder,
+                    db_path=folder / "data" / "bulletin.db",
+                    bulletin_path=(
+                        folder / "bulletin" / f"Bulletin{cls_name.upper()}.xlsm"
+                    ),
+                    subject_files=xlsx_files,
+                )
     return None

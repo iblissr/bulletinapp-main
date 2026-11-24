@@ -89,16 +89,16 @@ SECTIONS: dict[str, SectionDef] = {
             ("3EME", "3ème"),
         ),
         subjects=(
-            ("Malagasy",        4.0),
-            ("Français",        3.0),
-            ("Anglais",         2.0),
-            ("Histo-geo",       4.0),
-            ("Mathématiques",   2.0),
-            ("Physique-chimie", 2.0),
-            ("SVT",             2.0),
-            ("EPS",             1.0),
-            ("EVA",             1.0),
-            ("Religion",        1.0),
+            ("Religion",             1.0),
+            ("Éducation à la Vie",   1.0),
+            ("Malagasy",             4.0),
+            ("Français",             3.0),
+            ("Anglais",              2.0),
+            ("Histoire-Géographie",  4.0),
+            ("Mathématiques",        2.0),
+            ("SVT",                  2.0),
+            ("Physique-chimie",      2.0),
+            ("EPS",                  1.0),
         ),
     ),
 
@@ -112,20 +112,63 @@ SECTIONS: dict[str, SectionDef] = {
             ("TLE",  "Terminale"),
         ),
         subjects=(
-            ("Malagasy",        4.0),
-            ("Français",        3.0),
-            ("Anglais",         2.0),
-            ("Philosophie",     2.0),
-            ("Histo-geo",       4.0),
-            ("Mathématiques",   2.0),
-            ("Physique-chimie", 2.0),
-            ("SVT",             2.0),
-            ("EPS",             1.0),
-            ("EVA",             1.0),
-            ("Religion",        1.0),
+            ("Religion",             1.0),
+            ("Éducation à la Vie",   1.0),
+            ("Malagasy",             4.0),
+            ("Français",             3.0),
+            ("Anglais",              2.0),
+            ("Histoire-Géographie",  4.0),
+            ("Mathématiques",        2.0),
+            ("SVT",                  2.0),
+            ("Physique-chimie",      2.0),
+            ("EPS",                  1.0),
+            ("Philosophie",          2.0),
         ),
     ),
 }
+
+
+# ---------------------------------------------------------------------------
+#  Restrictions par niveau de classe
+# ---------------------------------------------------------------------------
+# Certaines matières ne sont disponibles que pour certains niveaux.
+# La clé est le nom normalisé (minuscule), la valeur est l'ensemble
+# des clés de niveau (level_key) autorisées.
+LEVEL_SUBJECT_RESTRICTIONS: dict[str, set[str]] = {
+    "philosophie": {"1ERE", "TLE"},
+}
+
+
+# ---------------------------------------------------------------------------
+#  Surcharges de coefficients par série / classe
+# ---------------------------------------------------------------------------
+# Certaines matières ont des coefficients différents selon la série
+# (ex: Philosophie coeff 4 en TA, coeff 2 en TD).
+# La clé est un tuple (préfixe_insensible_du_nom_de_classe, nom_normalisé).
+CLASS_COEFF_OVERRIDES: dict[tuple[str, str], float] = {
+    ("TA", "philosophie"): 4.0,
+}
+
+
+def get_class_coeff(
+    subject_name: str, class_name: str, default: float = 2.0
+) -> float:
+    """Retourne le coefficient spécifique à une classe, ou *default*."""
+    norm_subj = subject_name.strip().lower()
+    cls = class_name.strip().upper()
+    for (prefix, subj), coeff in CLASS_COEFF_OVERRIDES.items():
+        if cls.startswith(prefix.upper()) and subj == norm_subj:
+            return coeff
+    return default
+
+
+def subject_allowed_for_level(subject_name: str, level_key: str) -> bool:
+    """Retourne True si *subject_name* est autorisée pour *level_key*."""
+    key = subject_name.strip().lower()
+    allowed = LEVEL_SUBJECT_RESTRICTIONS.get(key)
+    if allowed is None:
+        return True
+    return level_key.upper() in allowed
 
 
 # ---------------------------------------------------------------------------

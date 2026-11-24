@@ -1,0 +1,2758 @@
+import { ScrollView } from "std-widgets.slint";
+import "fonts/IBMPlexSans-Variable.ttf";
+import "fonts/IBMPlexMono-Regular.ttf";
+import "fonts/IBMPlexMono-Medium.ttf";
+import "fonts/Lora-Variable.ttf";
+
+global Palette {
+    in-out property <bool> dark: false;
+
+    // Couleurs adaptatives selon le thème
+    out property <color> paper:       dark ? #1A1E2E : #F7F2E8;
+    out property <color> paper-2:     dark ? #252A3B : #EDE6D7;
+    out property <color> surface:     dark ? #1E2334 : #FFFDF8;
+    out property <color> surface-alt: dark ? #222840 : #FAF5EB;
+    out property <color> ink:         dark ? #E8EAF0 : #16243D;
+    out property <color> ink-soft:    dark ? #2A3450 : #223350;
+    out property <color> text:        dark ? #CDD2DC : #25303F;
+    out property <color> muted:       dark ? #6C7890 : #6C7480;
+    out property <color> line:        dark ? #2E3550 : #DCD4C4;
+    out property <color> accent:      dark ? #D4735A : #B85C3E;
+    out property <color> accent-soft: dark ? #3A2520 : #F3E0D7;
+    out property <color> teal:        dark ? #3A8C7A : #2F6B5E;
+    out property <color> teal-soft:   dark ? #1A3530 : #DDEBE5;
+    out property <color> gold:        dark ? #D4AA35 : #C9A227;
+    out property <color> gold-soft:   dark ? #302A10 : #F3E8C7;
+    out property <color> danger:      dark ? #C45050 : #A33A32;
+    out property <color> danger-soft: dark ? #2E1818 : #F7E2DF;
+    out property <color> white:       dark ? #E8EAF0 : #FFFFFF;
+    out property <color> sidebar-bg:  dark ? #0F1422 : #16243D;
+    out property <color> menu-bg:     dark ? #1A1E2E : #FFFFFF;
+    out property <color> menu-text:   dark ? #CDD2DC : #25303F;
+    out property <color> menu-hover:  dark ? #252A3B : #F0EDE6;
+    out property <color> toolbar-bg:  dark ? #141828 : #FFFFFF;
+    out property <color> overlay-bg:  dark ? #16243DAA : #16243DAA;
+}
+
+struct ClassCardData {
+    name: string,
+    display-name: string,
+    division: string,
+    student-count-label: string,
+    subject-count-label: string,
+    sync-label: string,
+}
+
+struct StudentData {
+    id: int,
+    num: int,
+    name: string,
+    matricule: string,
+    genre: string,
+    naissance: string,
+}
+
+struct SubjectData {
+    id: int,
+    name: string,
+    coeff: float,
+    teacher: string,
+    abbrev: string,
+    coeff-label: string,
+}
+
+struct GradeRowData {
+    student-id: int,
+    num: int,
+    name: string,
+    notes: [string],
+    moy: string,
+    stripe: bool,
+}
+
+struct TableRowData {
+    id: int,
+    tone: int,
+    stripe: bool,
+    cells: [string],
+}
+
+struct DistRowData {
+    label: string,
+    count: int,
+    ratio: float,
+}
+
+// ---------------------------------------------------------------------------
+// Composants de base
+// ---------------------------------------------------------------------------
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <string> kicker;
+    in property <bool> active: false;
+    callback clicked();
+
+    height: 46px;
+    border-radius: 8px;
+    background: active ? Palette.ink-soft : (ta.has-hover ? #1C2B45 : transparent);
+
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 10px;
+
+        Rectangle {
+            width: 3px;
+            height: 20px;
+            border-radius: 2px;
+            background: active ? Palette.gold : transparent;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 1px;
+            Text {
+                text: label;
+                color: active ? Palette.white : #D8DFE9;
+                font-size: 14px;
+                font-weight: active ? 600 : 400;
+            }
+            if kicker != "" : Text {
+                text: kicker;
+                color: #8FA0B8;
+                font-size: 10px;
+                letter-spacing: 0.3px;
+            }
+        }
+    }
+}
+
+component AppButton inherits Rectangle {
+    in property <string> text;
+    in property <int> kind: 0;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    height: 38px;
+    width: Math.max(38px, label.preferred-width + 28px);
+    border-radius: 9px;
+    background: !enabled ? Palette.paper-2
+        : kind == 0 ? Palette.ink
+        : kind == 1 ? Palette.accent-soft
+        : kind == 3 ? Palette.danger-soft
+        : (ta.has-hover ? Palette.surface-alt : transparent);
+    border-width: kind == 2 ? 1px : 0px;
+    border-color: Palette.line;
+
+    ta := TouchArea {
+        clicked => { if (root.enabled) { root.clicked(); } }
+    }
+
+    label := Text {
+        text: root.text;
+        x: 14px;
+        width: parent.width - 28px;
+        height: parent.height;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+        font-size: 13px;
+        font-weight: 600;
+        color: !enabled ? Palette.muted
+            : kind == 0 ? Palette.white
+            : kind == 3 ? Palette.danger
+            : Palette.ink;
+        overflow: elide;
+    }
+}
+
+component Chip inherits Rectangle {
+    in property <string> text;
+    in property <bool> active: false;
+    callback clicked();
+
+    height: 32px;
+    width: chip-label.preferred-width + 26px;
+    border-radius: 16px;
+    background: active ? Palette.ink : Palette.surface;
+    border-width: 1px;
+    border-color: active ? Palette.ink : Palette.line;
+
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    chip-label := Text {
+        text: root.text;
+        x: 13px;
+        width: parent.width - 26px;
+        height: parent.height;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+        font-size: 12px;
+        font-weight: 500;
+        color: active ? Palette.white : Palette.text;
+        overflow: elide;
+    }
+}
+
+component Field inherits Rectangle {
+    in property <string> label;
+    in-out property <string> text;
+    in property <string> placeholder;
+    in property <bool> compact: false;
+    callback changed(string);
+
+    height: compact ? 38px : 60px;
+
+    VerticalLayout {
+        spacing: 4px;
+        if label != "" : Text {
+            text: root.label;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.7px;
+            color: Palette.muted;
+            height: 14px;
+        }
+        Rectangle {
+            height: compact ? 38px : 40px;
+            border-radius: 8px;
+            background: Palette.surface;
+            border-width: 1px;
+            border-color: Palette.line;
+
+            input := TextInput {
+                x: 11px;
+                width: parent.width - 22px;
+                height: parent.height;
+                text <=> root.text;
+                vertical-alignment: center;
+                font-size: 13px;
+                color: Palette.text;
+                single-line: true;
+                edited => { root.changed(input.text); }
+            }
+            if root.text == "" : Text {
+                x: 11px;
+                width: parent.width - 22px;
+                height: parent.height;
+                text: root.placeholder;
+                vertical-alignment: center;
+                font-size: 13px;
+                color: Palette.muted;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+component SearchBox inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder: "Rechercher…";
+    callback changed(string);
+
+    height: 38px;
+    width: 260px;
+    border-radius: 9px;
+    background: Palette.surface;
+    border-width: 1px;
+    border-color: Palette.line;
+
+    Text {
+        x: 12px;
+        y: 0px;
+        width: 16px;
+        height: parent.height;
+        text: "⌕";
+        font-size: 20px;
+        color: Palette.muted;
+        vertical-alignment: center;
+    }
+
+    TextInput {
+        x: 36px;
+        width: parent.width - 48px;
+        height: parent.height;
+        text <=> root.text;
+        vertical-alignment: center;
+        font-size: 13px;
+        color: Palette.text;
+        single-line: true;
+        edited => { root.changed(root.text); }
+    }
+    if root.text == "" : Text {
+        x: 36px;
+        width: parent.width - 48px;
+        height: parent.height;
+        text: root.placeholder;
+        vertical-alignment: center;
+        font-size: 13px;
+        color: Palette.muted;
+        overflow: elide;
+    }
+}
+
+component Kpi inherits Rectangle {
+    in property <string> value;
+    in property <string> label;
+    in property <color> tone: Palette.teal;
+
+    height: 86px;
+    border-radius: 14px;
+    background: Palette.surface;
+    border-width: 1px;
+    border-color: Palette.line;
+
+    HorizontalLayout {
+        padding: 16px;
+        spacing: 14px;
+
+        Rectangle {
+            width: 4px;
+            height: parent.height - 24px;
+            border-radius: 2px;
+            background: tone;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 1px;
+            Text {
+                text: value;
+                font-family: "Lora";
+                font-size: 27px;
+                font-weight: 600;
+                color: Palette.ink;
+            }
+            Text {
+                text: label;
+                font-size: 11px;
+                letter-spacing: 0.4px;
+                color: Palette.muted;
+            }
+        }
+    }
+}
+
+component ClassCard inherits Rectangle {
+    in property <ClassCardData> data;
+    callback open();
+
+    height: 188px;
+    border-radius: 16px;
+    background: Palette.surface;
+    border-width: 1px;
+    border-color: ta.has-hover ? Palette.gold : Palette.line;
+
+    ta := TouchArea {
+        clicked => { root.open(); }
+    }
+
+    HorizontalLayout {
+        Rectangle {
+            width: 6px;
+            background: data.division == "COLLEGE" ? Palette.gold
+                : data.division == "LYCEE" ? Palette.teal
+                : Palette.accent;
+        }
+
+        VerticalLayout {
+            padding-left: 18px;
+            padding-right: 18px;
+            padding-top: 14px;
+            padding-bottom: 14px;
+            spacing: 8px;
+
+            HorizontalLayout {
+                Text {
+                    text: data.division;
+                    font-size: 10px;
+                    font-weight: 600;
+                    letter-spacing: 1.2px;
+                    color: data.division == "COLLEGE" ? Palette.gold
+                        : data.division == "LYCEE" ? Palette.teal
+                        : Palette.accent;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: "→";
+                    font-size: 16px;
+                    color: Palette.muted;
+                }
+            }
+
+            Text {
+                text: data.display-name;
+                font-family: "Lora";
+                font-size: 26px;
+                font-weight: 600;
+                color: Palette.ink;
+                overflow: elide;
+            }
+
+            Rectangle { height: 1px; background: Palette.line; }
+
+            HorizontalLayout {
+                spacing: 28px;
+                VerticalLayout {
+                    spacing: 0px;
+                    Text { text: data.student-count-label; font-family: "IBM Plex Mono"; font-size: 16px; font-weight: 500; color: Palette.ink; }
+                    Text { text: "élèves"; font-size: 10px; color: Palette.muted; }
+                }
+                VerticalLayout {
+                    spacing: 0px;
+                    Text { text: data.subject-count-label; font-family: "IBM Plex Mono"; font-size: 16px; font-weight: 500; color: Palette.ink; }
+                    Text { text: "matières"; font-size: 10px; color: Palette.muted; }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: data.sync-label;
+                    font-size: 10px;
+                    color: Palette.muted;
+                    vertical-alignment: bottom;
+                }
+            }
+        }
+    }
+}
+
+component DataTable inherits Rectangle {
+    in property <[string]> headers;
+    in property <[TableRowData]> rows;
+    in property <[length]> widths;
+    in property <int> selected-id: -1;
+    callback row-clicked(int);
+
+    background: Palette.surface;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: Palette.line;
+    clip: true;
+
+    VerticalLayout {
+        Rectangle {
+            height: 38px;
+            background: Palette.paper-2;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                for header[i] in headers : Text {
+                    width: widths[i];
+                    height: parent.height;
+                    text: header;
+                    vertical-alignment: center;
+                    font-size: 10px;
+                    font-weight: 600;
+                    letter-spacing: 0.6px;
+                    color: Palette.muted;
+                    overflow: elide;
+                }
+            }
+        }
+
+        ScrollView {
+            VerticalLayout {
+                for row in rows : Rectangle {
+                    height: 42px;
+                    background: row.id >= 0 && row.id == root.selected-id ? Palette.accent-soft
+                        : row.tone == 1 ? Palette.paper-2
+                        : row.tone == 2 ? Palette.danger-soft
+                        : row.tone == 3 ? Palette.surface-alt
+                        : (row.stripe ? Palette.surface-alt : Palette.surface);
+
+                    HorizontalLayout {
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        for cell[i] in row.cells : Text {
+                            width: widths[i];
+                            height: parent.height;
+                            text: cell;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            color: row.tone == 2 ? Palette.danger : Palette.text;
+                            overflow: elide;
+                        }
+                    }
+
+                    TouchArea {
+                        clicked => { root.row-clicked(row.id); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component GradeTable inherits Rectangle {
+    in property <[GradeRowData]> rows;
+    in property <[string]> exam-labels;
+    callback edited(int, int, string);
+
+    background: Palette.surface;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: Palette.line;
+    clip: true;
+
+    VerticalLayout {
+        Rectangle {
+            height: 42px;
+            background: Palette.paper-2;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                spacing: 0px;
+                Text {
+                    width: 44px;
+                    height: parent.height;
+                    text: "N°";
+                    vertical-alignment: center;
+                    font-size: 10px;
+                    font-weight: 600;
+                    color: Palette.muted;
+                }
+                Text {
+                    width: 228px;
+                    height: parent.height;
+                    text: "Nom et prénoms";
+                    vertical-alignment: center;
+                    font-size: 10px;
+                    font-weight: 600;
+                    letter-spacing: 0.5px;
+                    color: Palette.muted;
+                }
+                for label in exam-labels : Text {
+                    width: 82px;
+                    height: parent.height;
+                    text: label;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                    font-size: 10px;
+                    font-weight: 600;
+                    color: Palette.ink;
+                }
+                Text {
+                    width: 62px;
+                    height: parent.height;
+                    text: "Moy.";
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                    font-size: 10px;
+                    font-weight: 600;
+                    color: Palette.muted;
+                }
+            }
+        }
+
+        ScrollView {
+            VerticalLayout {
+                for row in rows : Rectangle {
+                    height: 44px;
+                    background: row.stripe ? Palette.surface-alt : Palette.surface;
+
+                    HorizontalLayout {
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        spacing: 0px;
+                        Text {
+                            width: 44px;
+                            height: parent.height;
+                            text: row.num;
+                            vertical-alignment: center;
+                            font-family: "IBM Plex Mono";
+                            font-size: 12px;
+                            color: Palette.muted;
+                        }
+                        Text {
+                            width: 228px;
+                            height: parent.height;
+                            text: row.name;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            color: Palette.text;
+                            overflow: elide;
+                        }
+                        for note[i] in row.notes : Rectangle {
+                            width: 82px;
+                            height: 32px;
+                            y: 6px;
+                            border-radius: 6px;
+                            background: note == "" ? transparent : Palette.surface-alt;
+                            border-width: 1px;
+                            border-color: note == "" ? Palette.line : Palette.teal-soft;
+
+                            input := TextInput {
+                                x: 4px;
+                                width: parent.width - 8px;
+                                height: parent.height;
+                                text: note;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                font-family: "IBM Plex Mono";
+                                font-size: 12px;
+                                color: Palette.text;
+                                single-line: true;
+                                edited => { root.edited(row.student-id, i + 1, input.text); }
+                            }
+                        }
+                        Text {
+                            width: 62px;
+                            height: parent.height;
+                            text: row.moy;
+                            vertical-alignment: center;
+                            horizontal-alignment: center;
+                            font-family: "IBM Plex Mono";
+                            font-size: 12px;
+                            font-weight: 500;
+                            color: row.moy == "NC" ? Palette.muted : Palette.teal;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component DistributionBar inherits Rectangle {
+    in property <DistRowData> data;
+    in property <int> max-count: 1;
+
+    height: 28px;
+    HorizontalLayout {
+        spacing: 10px;
+        Text {
+            width: 42px;
+            text: data.label;
+            font-family: "IBM Plex Mono";
+            font-size: 11px;
+            color: Palette.muted;
+            vertical-alignment: center;
+        }
+        Rectangle {
+            height: 8px;
+            width: parent.width - 100px;
+            border-radius: 4px;
+            background: Palette.paper-2;
+            Rectangle {
+                height: 8px;
+                width: parent.width * data.ratio;
+                border-radius: 4px;
+                background: Palette.teal;
+            }
+        }
+        Text {
+            width: 38px;
+            text: data.count;
+            font-family: "IBM Plex Mono";
+            font-size: 11px;
+            color: Palette.text;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+        }
+    }
+}
+
+component Toast inherits Rectangle {
+    in property <string> message;
+    in property <int> kind;
+    in property <length> win-width: 1360px;
+    in property <length> win-height: 860px;
+
+    x: win-width - 246px - self.width - 26px;
+    y: win-height - self.height - 26px;
+    width: 420px;
+    height: 50px;
+    border-radius: 12px;
+    background: kind == 2 ? Palette.danger : Palette.ink;
+    drop-shadow-blur: 18px;
+    drop-shadow-color: #00000033;
+    drop-shadow-offset-y: 6px;
+
+    Text {
+        x: 16px;
+        width: parent.width - 32px;
+        height: parent.height;
+        text: message;
+        color: Palette.white;
+        font-size: 12px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Barre de menu
+// ---------------------------------------------------------------------------
+
+component MenuItem inherits Rectangle {
+    in property <string> label;
+    in property <string> shortcut: "";
+    callback triggered();
+
+    height: 34px;
+    background: ta.has-hover ? Palette.menu-hover : transparent;
+
+    ta := TouchArea {
+        clicked => { root.triggered(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 20px;
+        Text {
+            text: label;
+            font-size: 13px;
+            color: Palette.menu-text;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        if shortcut != "" : Text {
+            text: shortcut;
+            font-size: 11px;
+            color: Palette.muted;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component MenuSeparator inherits Rectangle {
+    height: 1px;
+    background: Palette.line;
+    horizontal-stretch: 1;
+}
+
+component MenuPopup inherits Rectangle {
+    in property <string> title;
+    in property <bool> show: false;
+
+    background: Palette.menu-bg;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Palette.line;
+    drop-shadow-blur: 20px;
+    drop-shadow-color: #00000022;
+    drop-shadow-offset-y: 4px;
+    min-width: 240px;
+    visible: show;
+
+    @children
+}
+
+component MenuBarItem inherits Rectangle {
+    in property <string> label;
+    in-out property <bool> open: false;
+    callback clicked();
+
+    height: 36px;
+    width: lbl.preferred-width + 24px;
+    border-radius: 6px;
+    background: open ? Palette.menu-hover : (ta.has-hover ? Palette.menu-hover : transparent);
+
+    ta := TouchArea {
+        clicked => {
+            root.open = !root.open;
+            root.clicked();
+        }
+    }
+
+    lbl := Text {
+        text: label;
+        x: 12px;
+        width: parent.width - 24px;
+        height: parent.height;
+        vertical-alignment: center;
+        font-size: 13px;
+        color: Palette.menu-text;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Fenêtre principale
+// ---------------------------------------------------------------------------
+
+export component AppWindow inherits Window {
+    title: "Bulletin — Registre scolaire";
+    width: 1360px;
+    height: 860px;
+    background: Palette.paper;
+    default-font-family: "IBM Plex Sans";
+    default-font-size: 13px;
+
+    // --- Pages ---
+    in property <int> page: 0;
+    in property <string> app-version: "0.1.0";
+    in property <string> db-path-label: "";
+
+    // --- Données classes ---
+    in property <[ClassCardData]> classes;
+    in property <[StudentData]> students;
+    in property <[TableRowData]> student-rows;
+    in property <[SubjectData]> subjects;
+    in property <[TableRowData]> subject-rows;
+    in property <[GradeRowData]> grade-rows;
+    in property <[string]> exam-labels;
+    in property <[string]> moy-headers;
+    in property <[length]> moy-widths;
+    in property <[TableRowData]> moy-rows;
+    in property <[string]> tot-headers;
+    in property <[length]> tot-widths;
+    in property <[TableRowData]> tot-rows;
+    in property <[string]> cr-headers;
+    in property <[TableRowData]> cr-rows;
+    in property <[DistRowData]> cr-distribution;
+
+    // --- Statistiques accueil ---
+    in property <int> total-classes: 0;
+    in property <int> total-students: 0;
+    in property <int> total-subjects: 0;
+    in property <int> total-classed: 0;
+    in property <string> class-filter: "all";
+
+    // --- Classe active ---
+    in property <string> selected-class-name: "";
+    in property <string> selected-class-display: "";
+    in property <string> selected-class-division: "";
+    in property <string> selected-class-students: "";
+    in property <string> selected-class-subjects: "";
+    in property <string> selected-class-average: "";
+    in property <int> active-tab: 0;
+
+    // --- Notes / matières ---
+    in property <int> active-subject: 0;
+    in property <string> active-subject-name: "";
+    in property <string> active-subject-meta: "";
+    in property <int> active-exam: 1;
+    in property <int> active-trim: 1;
+    in property <int> active-moy-tab: 0;
+    in property <string> moy-tab-label: "Trimestre 1";
+
+    // --- Compte rendu ---
+    in property <string> cr-effectif: "";
+    in property <string> cr-classes: "";
+    in property <string> cr-moy-mj: "";
+    in property <string> cr-moy-co: "";
+    in property <string> cr-moy-ensemble: "";
+
+    // --- Configuration classe ---
+    in-out property <string> set-etablissement: "";
+    in-out property <string> set-directeur: "";
+    in-out property <string> set-annee: "";
+    in-out property <string> set-classe: "";
+    in-out property <string> set-nb-examens: "6";
+    in-out property <string> set-nb-min: "3";
+    in-out property <string> set-prof-principal: "";
+    in-out property <string> set-coeff-default: "1";
+    in-out property <string> set-effectif: "";
+    in-out property <string> set-filles: "";
+    in-out property <string> set-garcons: "";
+    in-out property <string> set-logo-path: "";
+
+    // --- Configuration globale (accueil) ---
+    in-out property <string> global-etablissement: "";
+    in-out property <string> global-annee: "";
+    in-out property <string> global-export-dir: "";
+
+    // --- Formulaire matière ---
+    in property <int> subject-form-id: -1;
+    in-out property <string> subject-form-name: "";
+    in-out property <string> subject-form-coeff: "1";
+    in-out property <string> subject-form-teacher: "";
+
+    // --- Formulaire élève ---
+    in-out property <string> new-student-num: "";
+    in-out property <string> new-student-nom: "";
+    in-out property <string> new-student-prenoms: "";
+    in-out property <string> new-student-matricule: "";
+    in-out property <string> new-student-genre: "";
+    in-out property <string> new-student-naissance: "";
+
+    in property <int> selected-student-id: -1;
+    in property <int> selected-student-num: 0;
+    in property <string> selected-student-name: "";
+    in-out property <string> student-search: "";
+
+    // --- Nouvelle classe ---
+    in-out property <string> nc-section: "COLLEGE";
+    in-out property <string> nc-level: "6EME";
+    in-out property <[string]> nc-levels;
+    in-out property <string> nc-count: "1";
+    in-out property <string> nc-pattern: "numeric";
+    in-out property <string> nc-suffixes: "";
+    in-out property <string> nc-effectif: "45";
+    in-out property <string> nc-etablissement: "";
+    in-out property <string> nc-annee: "";
+    in-out property <string> nc-prof: "";
+    in property <string> nc-preview: "";
+    in property <string> nc-subjects-label: "";
+
+    // --- État UI ---
+    in property <string> status-message: "";
+    in property <int> status-kind: 0;
+    in property <bool> busy: false;
+    in property <string> busy-label: "";
+    in-out property <int> home-tab: 0; // 0 = Classes, 1 = Configuration globale
+    in-out property <bool> show-about: false;
+    in-out property <bool> show-sync-all-confirm: false;
+
+    // Propriétés internes pour le menu
+    private property <bool> menu-file-open: false;
+    private property <bool> menu-tools-open: false;
+    private property <bool> menu-view-open: false;
+    private property <bool> menu-help-open: false;
+
+    // --- Callbacks navigation ---
+    callback open-class(string);
+    callback go-home();
+    callback refresh-classes();
+    callback open-new-class();
+    callback cancel-new-class();
+    callback new-class-section(string);
+    callback new-class-level(string);
+    callback new-class-pattern(string);
+    callback new-class-refresh();
+    callback create-class();
+    callback filter-classes(string);
+    callback search-classes(string);
+    callback select-tab(int);
+    callback select-home-tab(int);
+
+    // --- Callbacks notes / matières ---
+    callback select-subject(int);
+    callback edit-subject(int);
+    callback select-exam(int);
+    callback select-moy-tab(int);
+    callback select-cr-trim(int);
+    callback grade-edited(int, int, string);
+    callback save-grades();
+
+    // --- Callbacks synchronisation ---
+    callback sync-class();
+    callback sync-all-classes();  // NOUVEAU : sync globale depuis accueil
+    callback sync-subject();
+    callback import-subject();
+
+    // --- Callbacks export ---
+    callback export-subject();
+    callback export-totalisation();
+    callback export-moyennes();
+    callback export-profs();
+    callback export-profs-all(); // NOUVEAU : export global depuis accueil
+    callback export-pdf();
+
+    // --- Callbacks import ---
+    callback import-students-preview(); // NOUVEAU : import avec aperçu avant import
+    callback import-students-global(); // NOUVEAU : import global depuis accueil
+
+    // --- Callbacks élèves ---
+    callback clear-subject();
+    callback add-student();
+    callback update-student();
+    callback delete-student();
+    callback select-student(int);
+    callback generate-students();
+    callback student-search-changed(string);
+
+    // --- Callbacks configuration ---
+    callback save-settings();
+    callback save-global-config(); // NOUVEAU : config globale
+    callback save-subject();
+    callback new-subject();
+    callback delete-subject();
+
+    // --- Callbacks données ---
+    callback backup-database();
+    callback restore-database();
+    callback reset-class();
+    callback refresh-data();
+
+    // --- Callbacks menu ---
+    callback menu-new-class();
+    callback menu-sync();
+    callback menu-import-global();
+    callback menu-export-global();
+    callback menu-export-settings();
+    callback menu-backup-manager();
+    callback menu-sync-settings();
+    callback menu-reset-all();
+    callback menu-toggle-theme();
+    callback menu-select-logo();
+    callback menu-about();
+    callback menu-quit();
+    callback menu-save();
+    callback menu-search();
+    callback menu-delete-class();
+
+    // Fermer tous les menus quand on clique ailleurs
+    function close-all-menus() {
+        root.menu-file-open = false;
+        root.menu-tools-open = false;
+        root.menu-view-open = false;
+        root.menu-help-open = false;
+    }
+
+    VerticalLayout {
+        // ----------------------------------------------------------------
+        // Barre de menu
+        // ----------------------------------------------------------------
+        Rectangle {
+            height: 36px;
+            background: Palette.menu-bg;
+            border-width: 0px;
+
+            // Fond pour fermer les menus
+            ta-close := TouchArea {
+                width: parent.width;
+                height: parent.height;
+                clicked => { root.close-all-menus(); }
+            }
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 2px;
+
+                // Menu Fichier
+                Rectangle {
+                    width: mbi-file.width;
+                    height: parent.height;
+
+                    mbi-file := MenuBarItem {
+                        label: "Fichier";
+                        open: root.menu-file-open;
+                        clicked => {
+                            root.menu-tools-open = false;
+                            root.menu-view-open = false;
+                            root.menu-help-open = false;
+                        }
+                    }
+
+                    if root.menu-file-open : Rectangle {
+                        y: 36px;
+                        x: 0;
+                        z: 100;
+                        background: Palette.menu-bg;
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: Palette.line;
+                        drop-shadow-blur: 20px;
+                        drop-shadow-color: #00000022;
+                        drop-shadow-offset-y: 4px;
+                        min-width: 260px;
+                        height: file-menu-layout.preferred-height + 8px;
+
+                        file-menu-layout := VerticalLayout {
+                            padding: 4px;
+                            spacing: 0px;
+                            MenuItem { label: "Nouvelle classe…"; shortcut: "Ctrl+N"; triggered => { root.close-all-menus(); root.menu-new-class(); } }
+                            MenuItem { label: "Synchroniser"; shortcut: "Ctrl+R"; triggered => { root.close-all-menus(); root.menu-sync(); } }
+                            MenuSeparator {}
+                            MenuItem { label: "Importer des élèves…"; shortcut: "Ctrl+I"; triggered => { root.close-all-menus(); root.menu-import-global(); } }
+                            MenuSeparator {}
+                            MenuItem { label: "Exporter feuilles profs…"; shortcut: "Ctrl+E"; triggered => { root.close-all-menus(); root.menu-export-global(); } }
+                            MenuSeparator {}
+                            MenuItem { label: "Enregistrer"; shortcut: "Ctrl+S"; triggered => { root.close-all-menus(); root.menu-save(); } }
+                            MenuItem { label: "Rechercher"; shortcut: "Ctrl+F"; triggered => { root.close-all-menus(); root.menu-search(); } }
+                            MenuSeparator {}
+                            MenuItem { label: "Quitter"; shortcut: "Ctrl+Q"; triggered => { root.close-all-menus(); root.menu-quit(); } }
+                        }
+                    }
+                }
+
+                // Menu Outils
+                Rectangle {
+                    width: mbi-tools.width;
+                    height: parent.height;
+
+                    mbi-tools := MenuBarItem {
+                        label: "Outils";
+                        open: root.menu-tools-open;
+                        clicked => {
+                            root.menu-file-open = false;
+                            root.menu-view-open = false;
+                            root.menu-help-open = false;
+                        }
+                    }
+
+                    if root.menu-tools-open : Rectangle {
+                        y: 36px;
+                        x: 0;
+                        z: 100;
+                        background: Palette.menu-bg;
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: Palette.line;
+                        drop-shadow-blur: 20px;
+                        drop-shadow-color: #00000022;
+                        drop-shadow-offset-y: 4px;
+                        min-width: 260px;
+                        height: tools-menu-layout.preferred-height + 8px;
+
+                        tools-menu-layout := VerticalLayout {
+                            padding: 4px;
+                            spacing: 0px;
+                            MenuItem { label: "Paramètres d'exportation…"; triggered => { root.close-all-menus(); root.menu-export-settings(); } }
+                            MenuItem { label: "Gestion des sauvegardes…"; triggered => { root.close-all-menus(); root.menu-backup-manager(); } }
+                            MenuItem { label: "Paramètres de synchronisation…"; triggered => { root.close-all-menus(); root.menu-sync-settings(); } }
+                            MenuSeparator {}
+                            MenuItem { label: "Supprimer la classe active…"; triggered => { root.close-all-menus(); root.menu-delete-class(); } }
+                            MenuItem { label: "Réinitialiser toutes les classes…"; triggered => { root.close-all-menus(); root.menu-reset-all(); } }
+                        }
+                    }
+                }
+
+                // Menu Affichage
+                Rectangle {
+                    width: mbi-view.width;
+                    height: parent.height;
+
+                    mbi-view := MenuBarItem {
+                        label: "Affichage";
+                        open: root.menu-view-open;
+                        clicked => {
+                            root.menu-file-open = false;
+                            root.menu-tools-open = false;
+                            root.menu-help-open = false;
+                        }
+                    }
+
+                    if root.menu-view-open : Rectangle {
+                        y: 36px;
+                        x: 0;
+                        z: 100;
+                        background: Palette.menu-bg;
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: Palette.line;
+                        drop-shadow-blur: 20px;
+                        drop-shadow-color: #00000022;
+                        drop-shadow-offset-y: 4px;
+                        min-width: 240px;
+                        height: view-menu-layout.preferred-height + 8px;
+
+                        view-menu-layout := VerticalLayout {
+                            padding: 4px;
+                            spacing: 0px;
+                            MenuItem {
+                                label: Palette.dark ? "Mode clair" : "Mode sombre";
+                                shortcut: "Ctrl+T";
+                                triggered => {
+                                    root.close-all-menus();
+                                    Palette.dark = !Palette.dark;
+                                    root.menu-toggle-theme();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Menu Aide
+                Rectangle {
+                    width: mbi-help.width;
+                    height: parent.height;
+
+                    mbi-help := MenuBarItem {
+                        label: "Aide";
+                        open: root.menu-help-open;
+                        clicked => {
+                            root.menu-file-open = false;
+                            root.menu-tools-open = false;
+                            root.menu-view-open = false;
+                        }
+                    }
+
+                    if root.menu-help-open : Rectangle {
+                        y: 36px;
+                        x: 0;
+                        z: 100;
+                        background: Palette.menu-bg;
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: Palette.line;
+                        drop-shadow-blur: 20px;
+                        drop-shadow-color: #00000022;
+                        drop-shadow-offset-y: 4px;
+                        min-width: 200px;
+                        height: help-menu-layout.preferred-height + 8px;
+
+                        help-menu-layout := VerticalLayout {
+                            padding: 4px;
+                            spacing: 0px;
+                            MenuItem { label: "À propos…"; triggered => { root.close-all-menus(); root.show-about = true; } }
+                        }
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                // Indicateur de thème
+                Rectangle {
+                    width: 80px;
+                    height: parent.height;
+                    TouchArea {
+                        clicked => {
+                            Palette.dark = !Palette.dark;
+                            root.menu-toggle-theme();
+                        }
+                    }
+                    Text {
+                        text: Palette.dark ? "☀ Clair" : "☾ Sombre";
+                        font-size: 11px;
+                        color: Palette.muted;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // Séparateur sous la barre de menu
+        Rectangle {
+            height: 1px;
+            background: Palette.line;
+        }
+
+        // ----------------------------------------------------------------
+        // Corps principal : sidebar + contenu
+        // ----------------------------------------------------------------
+        HorizontalLayout {
+            // ------------------------------------------------------------
+            // Sidebar
+            // ------------------------------------------------------------
+            Rectangle {
+                width: 246px;
+                background: Palette.sidebar-bg;
+
+                VerticalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    padding-top: 22px;
+                    padding-bottom: 18px;
+                    spacing: 6px;
+
+                    Text {
+                        text: "BULLETIN";
+                        font-family: "Lora";
+                        font-size: 25px;
+                        font-weight: 600;
+                        letter-spacing: 2px;
+                        color: Palette.white;
+                    }
+                    Text {
+                        text: "Registre scolaire";
+                        font-size: 10px;
+                        letter-spacing: 1.8px;
+                        color: #8FA0B8;
+                    }
+
+                    Rectangle {
+                        height: 1px;
+                        background: #2C3B55;
+                    }
+
+                    NavItem {
+                        label: "Accueil";
+                        kicker: "Toutes les classes";
+                        active: root.page == 0;
+                        clicked => { root.go-home(); }
+                    }
+
+                    if root.page == 1 : Rectangle {
+                        height: 1px;
+                        background: #2C3B55;
+                    }
+
+                    if root.page == 1 : VerticalLayout {
+                        spacing: 2px;
+                        Text {
+                            text: root.selected-class-display;
+                            font-family: "Lora";
+                            font-size: 20px;
+                            font-weight: 600;
+                            color: Palette.white;
+                        }
+                        NavItem { label: "Élèves"; kicker: "Effectif et fiches"; active: root.active-tab == 0; clicked => { root.select-tab(0); } }
+                        NavItem { label: "Notes"; kicker: "Saisie par matière"; active: root.active-tab == 1; clicked => { root.select-tab(1); } }
+                        NavItem { label: "Moyennes"; kicker: "Trimestres et annuelle"; active: root.active-tab == 2; clicked => { root.select-tab(2); } }
+                        NavItem { label: "Totalisation"; kicker: "Classement par examen"; active: root.active-tab == 3; clicked => { root.select-tab(3); } }
+                        NavItem { label: "Compte rendu"; kicker: "Statistiques de classe"; active: root.active-tab == 4; clicked => { root.select-tab(4); } }
+                        NavItem { label: "Configuration"; kicker: "Réglages et matières"; active: root.active-tab == 5; clicked => { root.select-tab(5); } }
+                    }
+
+                    Rectangle { vertical-stretch: 1; }
+
+                    Rectangle {
+                        height: 1px;
+                        background: #2C3B55;
+                    }
+
+                    Text {
+                        text: "Version " + root.app-version;
+                        font-size: 10px;
+                        color: #8FA0B8;
+                    }
+                    Text {
+                        text: root.db-path-label;
+                        font-size: 9px;
+                        color: #6E809A;
+                        overflow: elide;
+                    }
+                }
+            }
+
+            // ------------------------------------------------------------
+            // Contenu principal
+            // ------------------------------------------------------------
+            Rectangle {
+                background: Palette.paper;
+
+                // ============================================================
+                // PAGE 0 : ACCUEIL
+                // ============================================================
+                if root.page == 0 : VerticalLayout {
+
+                    // Toolbar globale : Importer / Synchroniser / Exporter
+                    Rectangle {
+                        height: 52px;
+                        background: Palette.toolbar-bg;
+                        border-width: 0px;
+
+                        HorizontalLayout {
+                            padding-left: 20px;
+                            padding-right: 20px;
+                            spacing: 8px;
+
+                            VerticalLayout {
+                                alignment: center;
+                                Text {
+                                    text: "Registre des classes";
+                                    font-family: "Lora";
+                                    font-size: 20px;
+                                    font-weight: 600;
+                                    color: Palette.ink;
+                                }
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            // Bouton Importer (global)
+                            AppButton {
+                                text: "⬆ Importer";
+                                kind: 2;
+                                clicked => { root.import-students-global(); }
+                            }
+                            // Bouton Synchroniser (global)
+                            AppButton {
+                                text: "↻ Synchroniser";
+                                kind: 1;
+                                clicked => { root.sync-all-classes(); }
+                            }
+                            // Bouton Exporter (global)
+                            AppButton {
+                                text: "⬇ Exporter";
+                                kind: 2;
+                                clicked => { root.export-profs-all(); }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: Palette.line; }
+
+                    // Onglets accueil : Classes / Configuration globale
+                    Rectangle {
+                        height: 44px;
+                        background: Palette.surface;
+                        border-width: 0px;
+
+                        HorizontalLayout {
+                            padding-left: 20px;
+                            padding-right: 20px;
+                            spacing: 4px;
+
+                            Rectangle {
+                                height: 44px;
+                                border-radius: 0px;
+                                background: transparent;
+
+                                HorizontalLayout {
+                                    spacing: 0px;
+
+                                    // Onglet Classes
+                                    Rectangle {
+                                        width: tab-classes-lbl.preferred-width + 32px;
+                                        height: 44px;
+                                        background: transparent;
+                                        border-width: 0px;
+
+                                        Rectangle {
+                                            x: 0; y: 40px;
+                                            width: parent.width;
+                                            height: 3px;
+                                            border-radius: 2px;
+                                            background: root.home-tab == 0 ? Palette.accent : transparent;
+                                        }
+
+                                        TouchArea {
+                                            clicked => {
+                                                root.home-tab = 0;
+                                                root.select-home-tab(0);
+                                            }
+                                        }
+
+                                        tab-classes-lbl := Text {
+                                            x: 16px;
+                                            width: parent.width - 32px;
+                                            height: parent.height;
+                                            text: "Classes";
+                                            vertical-alignment: center;
+                                            font-size: 13px;
+                                            font-weight: root.home-tab == 0 ? 600 : 400;
+                                            color: root.home-tab == 0 ? Palette.ink : Palette.muted;
+                                        }
+                                    }
+
+                                    // Onglet Configuration globale
+                                    Rectangle {
+                                        width: tab-config-lbl.preferred-width + 32px;
+                                        height: 44px;
+                                        background: transparent;
+
+                                        Rectangle {
+                                            x: 0; y: 40px;
+                                            width: parent.width;
+                                            height: 3px;
+                                            border-radius: 2px;
+                                            background: root.home-tab == 1 ? Palette.accent : transparent;
+                                        }
+
+                                        TouchArea {
+                                            clicked => {
+                                                root.home-tab = 1;
+                                                root.select-home-tab(1);
+                                            }
+                                        }
+
+                                        tab-config-lbl := Text {
+                                            x: 16px;
+                                            width: parent.width - 32px;
+                                            height: parent.height;
+                                            text: "Configuration globale";
+                                            vertical-alignment: center;
+                                            font-size: 13px;
+                                            font-weight: root.home-tab == 1 ? 600 : 400;
+                                            color: root.home-tab == 1 ? Palette.ink : Palette.muted;
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: Palette.line; }
+
+                    // --- Contenu onglet Classes ---
+                    if root.home-tab == 0 : VerticalLayout {
+                        padding: 24px;
+                        spacing: 16px;
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            SearchBox {
+                                text <=> root.student-search;
+                                placeholder: "Rechercher une classe…";
+                                changed(t) => { root.search-classes(t); }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            AppButton { text: "Nouvelle classe"; kind: 0; clicked => { root.open-new-class(); } }
+                            AppButton { text: "Actualiser"; kind: 2; clicked => { root.refresh-classes(); } }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 12px;
+                            Kpi { value: "" + root.total-classes; label: "CLASSES"; tone: Palette.gold; horizontal-stretch: 1; }
+                            Kpi { value: "" + root.total-students; label: "ÉLÈVES"; tone: Palette.teal; horizontal-stretch: 1; }
+                            Kpi { value: "" + root.total-subjects; label: "MATIÈRES"; tone: Palette.accent; horizontal-stretch: 1; }
+                            Kpi { value: "" + root.total-classed; label: "CLASSÉS"; tone: Palette.ink; horizontal-stretch: 1; }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Chip { text: "Toutes"; active: root.class-filter == "all"; clicked => { root.filter-classes("all"); } }
+                            Chip { text: "Collège"; active: root.class-filter == "COLLEGE"; clicked => { root.filter-classes("COLLEGE"); } }
+                            Chip { text: "Lycée"; active: root.class-filter == "LYCEE"; clicked => { root.filter-classes("LYCEE"); } }
+                            Chip { text: "Primaire"; active: root.class-filter == "PRIMAIRE"; clicked => { root.filter-classes("PRIMAIRE"); } }
+                            Rectangle { horizontal-stretch: 1; }
+                            Text {
+                                text: "Dernière sync : " + (root.classes.length > 0 ? root.classes[0].sync-label : "—");
+                                font-size: 11px;
+                                color: Palette.muted;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        if root.classes.length == 0 : Rectangle {
+                            border-radius: 16px;
+                            background: Palette.surface;
+                            border-width: 1px;
+                            border-color: Palette.line;
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 8px;
+                                Text { text: "Aucune classe détectée"; font-family: "Lora"; font-size: 26px; color: Palette.ink; horizontal-alignment: center; }
+                                Text { text: "Vérifiez que le dossier BULLETIN contient COLLEGE/, LYCEE/ ou PRIMAIRE/ avec des dossiers de classe."; font-size: 12px; color: Palette.muted; horizontal-alignment: center; }
+                                AppButton { text: "Actualiser"; kind: 0; clicked => { root.refresh-classes(); } }
+                            }
+                        }
+
+                        if root.classes.length > 0 : ScrollView {
+                            GridLayout {
+                                spacing: 14px;
+                                for card[i] in root.classes : ClassCard {
+                                    row: Math.floor(i / 3);
+                                    col: Math.mod(i, 3);
+                                    data: card;
+                                    open => { root.open-class(card.name); }
+                                }
+                            }
+                        }
+                    }
+
+                    // --- Contenu onglet Configuration globale ---
+                    if root.home-tab == 1 : ScrollView {
+                        VerticalLayout {
+                            padding: 24px;
+                            spacing: 16px;
+
+                            Text {
+                                text: "Configuration globale";
+                                font-family: "Lora";
+                                font-size: 28px;
+                                font-weight: 600;
+                                color: Palette.ink;
+                            }
+                            Text {
+                                text: "Paramètres appliqués par défaut à toutes les nouvelles classes.";
+                                font-size: 12px;
+                                color: Palette.muted;
+                            }
+
+                            // Panneau identité établissement
+                            Rectangle {
+                                border-radius: 14px;
+                                background: Palette.surface;
+                                border-width: 1px;
+                                border-color: Palette.line;
+                                VerticalLayout {
+                                    padding: 18px;
+                                    spacing: 12px;
+                                    Text { text: "Identité de l'établissement"; font-family: "Lora"; font-size: 20px; color: Palette.ink; }
+                                    HorizontalLayout {
+                                        spacing: 10px;
+                                        Field { label: "Établissement"; text <=> root.global-etablissement; placeholder: "Nom de l'établissement"; horizontal-stretch: 2; }
+                                        Field { label: "Année scolaire"; text <=> root.global-annee; placeholder: "2025-2026"; horizontal-stretch: 1; }
+                                    }
+                                    HorizontalLayout {
+                                        Rectangle { horizontal-stretch: 1; }
+                                        AppButton {
+                                            text: "Enregistrer la configuration";
+                                            kind: 0;
+                                            clicked => { root.save-global-config(); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Panneau chemins d'exportation
+                            Rectangle {
+                                border-radius: 14px;
+                                background: Palette.surface;
+                                border-width: 1px;
+                                border-color: Palette.line;
+                                VerticalLayout {
+                                    padding: 18px;
+                                    spacing: 12px;
+                                    Text { text: "Chemins d'exportation"; font-family: "Lora"; font-size: 20px; color: Palette.ink; }
+                                    Field {
+                                        label: "Dossier d'export global (feuilles profs)";
+                                        text <=> root.global-export-dir;
+                                        placeholder: "Chemin vers le dossier de destination…";
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Rectangle { horizontal-stretch: 1; }
+                                        AppButton {
+                                            text: "Parcourir…";
+                                            kind: 2;
+                                            clicked => { root.menu-export-settings(); }
+                                        }
+                                        AppButton {
+                                            text: "Enregistrer les chemins";
+                                            kind: 0;
+                                            clicked => { root.save-global-config(); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Panneau opérations globales
+                            Rectangle {
+                                border-radius: 14px;
+                                background: Palette.surface;
+                                border-width: 1px;
+                                border-color: Palette.line;
+                                VerticalLayout {
+                                    padding: 18px;
+                                    spacing: 12px;
+                                    Text { text: "Opérations globales"; font-family: "Lora"; font-size: 20px; color: Palette.ink; }
+                                    Text { text: "Ces actions s'appliquent à toutes les classes détectées."; font-size: 11px; color: Palette.muted; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        AppButton { text: "⬆ Importer toutes les classes"; kind: 2; clicked => { root.import-students-global(); } }
+                                        AppButton { text: "↻ Synchroniser toutes les classes"; kind: 1; clicked => { root.sync-all-classes(); } }
+                                        AppButton { text: "⬇ Exporter toutes les classes"; kind: 2; clicked => { root.export-profs-all(); } }
+                                        Rectangle { horizontal-stretch: 1; }
+                                    }
+                                }
+                            }
+
+                            // Zone de danger
+                            Rectangle {
+                                border-radius: 14px;
+                                background: Palette.danger-soft;
+                                border-width: 1px;
+                                border-color: #E7C4BF;
+                                VerticalLayout {
+                                    padding: 18px;
+                                    spacing: 8px;
+                                    Text { text: "Zone sensible"; font-family: "Lora"; font-size: 20px; color: Palette.danger; }
+                                    Text { text: "Ces actions sont irréversibles. Assurez-vous d'avoir des sauvegardes avant de continuer."; font-size: 11px; color: Palette.text; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        AppButton { text: "Réinitialiser toutes les classes"; kind: 3; clicked => { root.menu-reset-all(); } }
+                                        Rectangle { horizontal-stretch: 1; }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ============================================================
+                // PAGE 2 : NOUVELLE CLASSE
+                // ============================================================
+                if root.page == 2 : Rectangle {
+                    VerticalLayout {
+                        padding: 30px;
+                        spacing: 16px;
+
+                        Text {
+                            text: "Nouvelle classe";
+                            font-family: "Lora";
+                            font-size: 34px;
+                            font-weight: 600;
+                            color: Palette.ink;
+                        }
+                        Text {
+                            text: "Choisissez la section, le niveau et le nombre de sous-classes. Les matières, les élèves et les feuilles .xlsx sont créés automatiquement.";
+                            font-size: 12px;
+                            color: Palette.muted;
+                        }
+
+                        Rectangle {
+                            vertical-stretch: 0;
+                            border-radius: 14px;
+                            background: Palette.surface;
+                            border-width: 1px;
+                            border-color: Palette.line;
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 12px;
+
+                                Text { text: "Section"; font-size: 10px; font-weight: 600; letter-spacing: 0.7px; color: Palette.muted; }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Chip { text: "Maternelle"; active: root.nc-section == "MATER"; clicked => { root.new-class-section("MATER"); } }
+                                    Chip { text: "Primaire"; active: root.nc-section == "PRIM"; clicked => { root.new-class-section("PRIM"); } }
+                                    Chip { text: "Collège"; active: root.nc-section == "COLLEGE"; clicked => { root.new-class-section("COLLEGE"); } }
+                                    Chip { text: "Lycée"; active: root.nc-section == "LYCEE"; clicked => { root.new-class-section("LYCEE"); } }
+                                    Rectangle { horizontal-stretch: 1; }
+                                }
+
+                                Text { text: "Niveau"; font-size: 10px; font-weight: 600; letter-spacing: 0.7px; color: Palette.muted; }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    for level in root.nc-levels : Chip {
+                                        text: level;
+                                        active: root.nc-level == level;
+                                        clicked => { root.new-class-level(level); }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                }
+
+                                Text { text: "Génération des sous-classes"; font-size: 10px; font-weight: 600; letter-spacing: 0.7px; color: Palette.muted; }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Chip { text: "Numérique"; active: root.nc-pattern == "numeric"; clicked => { root.new-class-pattern("numeric"); } }
+                                    Chip { text: "Romain"; active: root.nc-pattern == "roman"; clicked => { root.new-class-pattern("roman"); } }
+                                    Chip { text: "Lettres"; active: root.nc-pattern == "alpha"; clicked => { root.new-class-pattern("alpha"); } }
+                                    Chip { text: "Personnalisé"; active: root.nc-pattern == "custom"; clicked => { root.new-class-pattern("custom"); } }
+                                    Rectangle { horizontal-stretch: 1; }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Field {
+                                        label: "Nombre de sous-classes";
+                                        text <=> root.nc-count;
+                                        placeholder: "1";
+                                        width: 170px;
+                                        changed(t) => { root.new-class-refresh(); }
+                                    }
+                                    Field {
+                                        label: "Suffixes (séparés par des virgules)";
+                                        text <=> root.nc-suffixes;
+                                        placeholder: "LI, LII, S";
+                                        horizontal-stretch: 2;
+                                        changed(t) => { root.new-class-refresh(); }
+                                    }
+                                    Field {
+                                        label: "Effectif par classe";
+                                        text <=> root.nc-effectif;
+                                        placeholder: "45";
+                                        width: 160px;
+                                        changed(t) => { root.new-class-refresh(); }
+                                    }
+                                }
+
+                                Rectangle {
+                                    height: 34px;
+                                    border-radius: 8px;
+                                    background: Palette.paper-2;
+                                    Text {
+                                        x: 10px;
+                                        width: parent.width - 20px;
+                                        height: parent.height;
+                                        vertical-alignment: center;
+                                        text: root.nc-preview == "" ? "Aucun nom généré" : "Classe(s) : " + root.nc-preview;
+                                        font-family: "IBM Plex Mono";
+                                        font-size: 12px;
+                                        color: Palette.ink;
+                                        overflow: elide;
+                                    }
+                                }
+                                Text {
+                                    text: root.nc-subjects-label;
+                                    font-size: 11px;
+                                    color: Palette.muted;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            vertical-stretch: 0;
+                            border-radius: 14px;
+                            background: Palette.surface;
+                            border-width: 1px;
+                            border-color: Palette.line;
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 10px;
+                                Text { text: "Identité"; font-family: "Lora"; font-size: 20px; color: Palette.ink; }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Field { label: "Établissement"; text <=> root.nc-etablissement; horizontal-stretch: 2; }
+                                    Field { label: "Année scolaire"; text <=> root.nc-annee; horizontal-stretch: 1; }
+                                    Field { label: "Professeur principal"; text <=> root.nc-prof; horizontal-stretch: 2; }
+                                }
+                            }
+                        }
+
+                        Rectangle { vertical-stretch: 1; }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Rectangle { horizontal-stretch: 1; }
+                            AppButton { text: "Annuler"; kind: 2; clicked => { root.cancel-new-class(); } }
+                            AppButton { text: "Créer la classe"; kind: 0; clicked => { root.create-class(); } }
+                        }
+                    }
+                }
+
+                // ============================================================
+                // PAGE 1 : VUE CLASSE
+                // ============================================================
+                if root.page == 1 : Rectangle {
+                    VerticalLayout {
+                        padding-left: 28px;
+                        padding-right: 28px;
+                        padding-top: 24px;
+                        padding-bottom: 20px;
+                        spacing: 16px;
+
+                        HorizontalLayout {
+                            VerticalLayout {
+                                spacing: 2px;
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Text { text: "Accueil"; font-size: 11px; color: Palette.muted; vertical-alignment: center; }
+                                    Text { text: "/"; font-size: 11px; color: Palette.muted; vertical-alignment: center; }
+                                    Text { text: root.selected-class-display; font-size: 11px; color: Palette.ink; font-weight: 600; vertical-alignment: center; }
+                                }
+                                Text {
+                                    text: root.selected-class-display;
+                                    font-family: "Lora";
+                                    font-size: 32px;
+                                    font-weight: 600;
+                                    color: Palette.ink;
+                                }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                VerticalLayout {
+                                    spacing: 0px;
+                                    Text { text: root.selected-class-students; font-family: "IBM Plex Mono"; font-size: 18px; font-weight: 500; color: Palette.ink; horizontal-alignment: right; }
+                                    Text { text: "élèves"; font-size: 10px; color: Palette.muted; horizontal-alignment: right; }
+                                }
+                                VerticalLayout {
+                                    spacing: 0px;
+                                    Text { text: root.selected-class-subjects; font-family: "IBM Plex Mono"; font-size: 18px; font-weight: 500; color: Palette.ink; horizontal-alignment: right; }
+                                    Text { text: "matières"; font-size: 10px; color: Palette.muted; horizontal-alignment: right; }
+                                }
+                                VerticalLayout {
+                                    spacing: 0px;
+                                    Text { text: root.selected-class-average; font-family: "IBM Plex Mono"; font-size: 18px; font-weight: 500; color: Palette.teal; horizontal-alignment: right; }
+                                    Text { text: "moyenne"; font-size: 10px; color: Palette.muted; horizontal-alignment: right; }
+                                }
+                            }
+                        }
+
+                        // Tabs
+                        HorizontalLayout {
+                            spacing: 4px;
+                            Rectangle {
+                                height: 40px;
+                                border-radius: 10px;
+                                background: Palette.surface;
+                                border-width: 1px;
+                                border-color: Palette.line;
+                                HorizontalLayout {
+                                    padding-left: 4px;
+                                    padding-right: 4px;
+                                    spacing: 2px;
+                                    Chip { text: "Élèves"; active: root.active-tab == 0; clicked => { root.select-tab(0); } }
+                                    Chip { text: "Notes"; active: root.active-tab == 1; clicked => { root.select-tab(1); } }
+                                    Chip { text: "Moyennes"; active: root.active-tab == 2; clicked => { root.select-tab(2); } }
+                                    Chip { text: "Totalisation"; active: root.active-tab == 3; clicked => { root.select-tab(3); } }
+                                    Chip { text: "Compte rendu"; active: root.active-tab == 4; clicked => { root.select-tab(4); } }
+                                    Chip { text: "Configuration"; active: root.active-tab == 5; clicked => { root.select-tab(5); } }
+                                }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            AppButton { text: "Synchroniser les .xlsx"; kind: 1; clicked => { root.sync-class(); } }
+                            AppButton { text: "Exporter les feuilles profs"; kind: 2; clicked => { root.export-profs(); } }
+                        }
+
+                        // Panes
+                        if root.active-tab == 0 : Rectangle {
+                            VerticalLayout {
+                                spacing: 12px;
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    SearchBox {
+                                        text <=> root.student-search;
+                                        placeholder: "Filtrer les élèves…";
+                                        changed(t) => { root.student-search-changed(t); }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    AppButton { text: "Importer…"; kind: 2; clicked => { root.import-students-preview(); } }
+                                    AppButton { text: "Générer une liste"; kind: 2; clicked => { root.generate-students(); } }
+                                    AppButton { text: "Supprimer"; kind: 3; enabled: root.selected-student-id > 0; clicked => { root.delete-student(); } }
+                                }
+
+                                Rectangle {
+                                    border-radius: 14px;
+                                    background: Palette.surface;
+                                    border-width: 1px;
+                                    border-color: Palette.line;
+                                    height: 74px;
+                                    HorizontalLayout {
+                                        padding: 12px;
+                                        spacing: 8px;
+                                        Field { label: "N°"; text <=> root.new-student-num; placeholder: "1"; width: 64px; compact: true; }
+                                        Field { label: "Nom"; text <=> root.new-student-nom; placeholder: "Nom de famille"; width: 180px; compact: true; }
+                                        Field { label: "Prénoms"; text <=> root.new-student-prenoms; placeholder: "Prénoms"; width: 180px; compact: true; }
+                                        Field { label: "Matricule"; text <=> root.new-student-matricule; placeholder: "—"; width: 120px; compact: true; }
+                                        Field { label: "Genre"; text <=> root.new-student-genre; placeholder: "F / M"; width: 70px; compact: true; }
+                                        Field { label: "Naissance"; text <=> root.new-student-naissance; placeholder: "JJ/MM/AAAA"; width: 120px; compact: true; }
+                                        Rectangle { horizontal-stretch: 1; }
+                                        AppButton { text: "Ajouter"; kind: 0; clicked => { root.add-student(); } }
+                                        AppButton { text: "Mettre à jour"; kind: 1; enabled: root.selected-student-id > 0; clicked => { root.update-student(); } }
+                                    }
+                                }
+
+                                DataTable {
+                                    headers: ["N°", "Nom et prénoms", "Matricule", "Genre", "Naissance"];
+                                    widths: [54px, 330px, 150px, 80px, 130px];
+                                    rows: root.student-rows;
+                                    selected-id: root.selected-student-id;
+                                    row-clicked(id) => { root.select-student(id); }
+                                    vertical-stretch: 1;
+                                }
+                            }
+                        }
+
+                        if root.active-tab == 1 : Rectangle {
+                            VerticalLayout {
+                                spacing: 12px;
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Text { text: "Matière"; font-size: 10px; font-weight: 600; letter-spacing: 0.6px; color: Palette.muted; vertical-alignment: center; }
+                                    for subject[i] in root.subjects : Chip {
+                                        text: subject.name;
+                                        active: root.active-subject == i;
+                                        clicked => { root.select-subject(i); }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    VerticalLayout {
+                                        spacing: 0px;
+                                        Text { text: root.active-subject-name; font-family: "Lora"; font-size: 24px; font-weight: 600; color: Palette.ink; }
+                                        Text { text: root.active-subject-meta; font-size: 11px; color: Palette.muted; }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    AppButton { text: "Enregistrer"; kind: 0; clicked => { root.save-grades(); } }
+                                    AppButton { text: "Synchroniser"; kind: 1; clicked => { root.sync-subject(); } }
+                                    AppButton { text: "Importer"; kind: 2; clicked => { root.import-subject(); } }
+                                    AppButton { text: "Exporter"; kind: 2; clicked => { root.export-subject(); } }
+                                    AppButton { text: "Vider"; kind: 3; clicked => { root.clear-subject(); } }
+                                }
+
+                                GradeTable {
+                                    rows: root.grade-rows;
+                                    exam-labels: root.exam-labels;
+                                    edited(id, exam, text) => { root.grade-edited(id, exam, text); }
+                                    vertical-stretch: 1;
+                                }
+
+                                Text {
+                                    text: "Les notes sont enregistrées automatiquement dans la base de la classe. La colonne Moy. est recalculée à l'enregistrement.";
+                                    font-size: 10px;
+                                    color: Palette.muted;
+                                }
+                            }
+                        }
+
+                        if root.active-tab == 2 : Rectangle {
+                            VerticalLayout {
+                                spacing: 12px;
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Chip { text: "Trimestre 1"; active: root.active-moy-tab == 0; clicked => { root.select-moy-tab(0); } }
+                                    Chip { text: "Trimestre 2"; active: root.active-moy-tab == 1; clicked => { root.select-moy-tab(1); } }
+                                    Chip { text: "Trimestre 3"; active: root.active-moy-tab == 2; clicked => { root.select-moy-tab(2); } }
+                                    Chip { text: "Annuelle"; active: root.active-moy-tab == 3; clicked => { root.select-moy-tab(3); } }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    AppButton { text: "Exporter tout"; kind: 2; clicked => { root.export-moyennes(); } }
+                                }
+                                Text { text: root.moy-tab-label; font-size: 11px; color: Palette.muted; }
+                                DataTable {
+                                    headers: root.moy-headers;
+                                    widths: root.moy-widths;
+                                    rows: root.moy-rows;
+                                    vertical-stretch: 1;
+                                }
+                            }
+                        }
+
+                        if root.active-tab == 3 : Rectangle {
+                            VerticalLayout {
+                                spacing: 12px;
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Text { text: "Examen"; font-size: 10px; font-weight: 600; letter-spacing: 0.6px; color: Palette.muted; vertical-alignment: center; }
+                                    Chip { text: "M.J 1"; active: root.active-exam == 1; clicked => { root.select-exam(1); } }
+                                    Chip { text: "Compo 1"; active: root.active-exam == 2; clicked => { root.select-exam(2); } }
+                                    Chip { text: "M.J 2"; active: root.active-exam == 3; clicked => { root.select-exam(3); } }
+                                    Chip { text: "Compo 2"; active: root.active-exam == 4; clicked => { root.select-exam(4); } }
+                                    Chip { text: "M.J 3"; active: root.active-exam == 5; clicked => { root.select-exam(5); } }
+                                    Chip { text: "Compo 3"; active: root.active-exam == 6; clicked => { root.select-exam(6); } }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    AppButton { text: "Exporter"; kind: 2; clicked => { root.export-totalisation(); } }
+                                }
+                                DataTable {
+                                    headers: root.tot-headers;
+                                    widths: root.tot-widths;
+                                    rows: root.tot-rows;
+                                    vertical-stretch: 1;
+                                }
+                            }
+                        }
+
+                        if root.active-tab == 4 : Rectangle {
+                            VerticalLayout {
+                                spacing: 12px;
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Chip { text: "Trimestre 1"; active: root.active-trim == 1; clicked => { root.select-cr-trim(1); } }
+                                    Chip { text: "Trimestre 2"; active: root.active-trim == 2; clicked => { root.select-cr-trim(2); } }
+                                    Chip { text: "Trimestre 3"; active: root.active-trim == 3; clicked => { root.select-cr-trim(3); } }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    AppButton { text: "Exporter PDF"; kind: 1; clicked => { root.export-pdf(); } }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    Kpi { value: root.cr-effectif; label: "EFFECTIF"; tone: Palette.gold; horizontal-stretch: 1; }
+                                    Kpi { value: root.cr-classes; label: "CLASSÉS"; tone: Palette.teal; horizontal-stretch: 1; }
+                                    Kpi { value: root.cr-moy-mj; label: "MOY. M.J."; tone: Palette.teal; horizontal-stretch: 1; }
+                                    Kpi { value: root.cr-moy-co; label: "MOY. COMPO"; tone: Palette.accent; horizontal-stretch: 1; }
+                                    Kpi { value: root.cr-moy-ensemble; label: "ENSEMBLE"; tone: Palette.ink; horizontal-stretch: 1; }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        border-radius: 14px;
+                                        background: Palette.surface;
+                                        border-width: 1px;
+                                        border-color: Palette.line;
+                                        VerticalLayout {
+                                            padding: 16px;
+                                            spacing: 8px;
+                                            Text { text: "Élèves ≥ 10/20 par matière"; font-family: "Lora"; font-size: 18px; color: Palette.ink; }
+                                            DataTable {
+                                                headers: root.cr-headers;
+                                                widths: [230px, 76px, 76px, 88px];
+                                                rows: root.cr-rows;
+                                                vertical-stretch: 1;
+                                            }
+                                        }
+                                    }
+                                    Rectangle {
+                                        width: 330px;
+                                        border-radius: 14px;
+                                        background: Palette.surface;
+                                        border-width: 1px;
+                                        border-color: Palette.line;
+                                        VerticalLayout {
+                                            padding: 16px;
+                                            spacing: 6px;
+                                            Text { text: "Répartition des moyennes"; font-family: "Lora"; font-size: 18px; color: Palette.ink; }
+                                            for row in root.cr-distribution : DistributionBar {
+                                                data: row;
+                                                max-count: 1;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if root.active-tab == 5 : Rectangle {
+                            ScrollView {
+                                VerticalLayout {
+                                    spacing: 12px;
+
+                                    Rectangle {
+                                        border-radius: 14px;
+                                        background: Palette.surface;
+                                        border-width: 1px;
+                                        border-color: Palette.line;
+                                        VerticalLayout {
+                                            padding: 16px;
+                                            spacing: 10px;
+                                            Text { text: "Identité de l'établissement"; font-family: "Lora"; font-size: 20px; color: Palette.ink; }
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                Field { label: "Établissement"; text <=> root.set-etablissement; horizontal-stretch: 2; }
+                                                Field { label: "Directeur"; text <=> root.set-directeur; horizontal-stretch: 1; }
+                                            }
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                Field { label: "Année scolaire"; text <=> root.set-annee; horizontal-stretch: 1; }
+                                                Field { label: "Classe"; text <=> root.set-classe; horizontal-stretch: 1; }
+                                                Field { label: "Examens"; text <=> root.set-nb-examens; horizontal-stretch: 1; }
+                                                Field { label: "Minimum notes"; text <=> root.set-nb-min; horizontal-stretch: 1; }
+                                                Field { label: "Professeur principal"; text <=> root.set-prof-principal; horizontal-stretch: 2; }
+                                            }
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                Field { label: "Coefficient par défaut"; text <=> root.set-coeff-default; horizontal-stretch: 1; }
+                                                Field { label: "Effectif"; text <=> root.set-effectif; horizontal-stretch: 1; }
+                                                Field { label: "Filles"; text <=> root.set-filles; horizontal-stretch: 1; }
+                                                Field { label: "Garçons"; text <=> root.set-garcons; horizontal-stretch: 1; }
+                                                Rectangle { horizontal-stretch: 1; }
+                                            }
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                Field { label: "Logo (PNG/JPG)"; text <=> root.set-logo-path; placeholder: "Chemin vers le logo…"; horizontal-stretch: 2; }
+                                                AppButton { text: "Choisir…"; kind: 2; clicked => { root.menu-select-logo(); } }
+                                                Rectangle { horizontal-stretch: 1; }
+                                            }
+                                            HorizontalLayout {
+                                                Rectangle { horizontal-stretch: 1; }
+                                                AppButton { text: "Enregistrer les réglages"; kind: 0; clicked => { root.save-settings(); } }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        border-radius: 14px;
+                                        background: Palette.surface;
+                                        border-width: 1px;
+                                        border-color: Palette.line;
+                                        VerticalLayout {
+                                            padding: 16px;
+                                            spacing: 10px;
+                                            Text { text: "Matières et coefficients"; font-family: "Lora"; font-size: 20px; color: Palette.ink; }
+                                            DataTable {
+                                                headers: ["Matière", "Coefficient", "Professeur", "Notes"];
+                                                widths: [260px, 110px, 240px, 100px];
+                                                rows: root.subject-rows;
+                                                selected-id: root.subject-form-id;
+                                                row-clicked(id) => { root.edit-subject(id); }
+                                                height: 240px;
+                                            }
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                Field { label: "Matière"; text <=> root.subject-form-name; horizontal-stretch: 2; }
+                                                Field { label: "Coefficient"; text <=> root.subject-form-coeff; width: 110px; }
+                                                Field { label: "Professeur"; text <=> root.subject-form-teacher; horizontal-stretch: 2; }
+                                                AppButton { text: "Ajouter"; kind: 1; clicked => { root.new-subject(); } }
+                                                AppButton { text: "Mettre à jour"; kind: 0; enabled: root.subject-form-id > 0; clicked => { root.save-subject(); } }
+                                                AppButton { text: "Supprimer"; kind: 3; enabled: root.subject-form-id > 0; clicked => { root.delete-subject(); } }
+                                            }
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 12px;
+                                        Rectangle {
+                                            horizontal-stretch: 1;
+                                            border-radius: 14px;
+                                            background: Palette.surface;
+                                            border-width: 1px;
+                                            border-color: Palette.line;
+                                            VerticalLayout {
+                                                padding: 16px;
+                                                spacing: 8px;
+                                                Text { text: "Sauvegardes"; font-family: "Lora"; font-size: 20px; color: Palette.ink; }
+                                                Text { text: "Une copie horodatée est créée dans le dossier .backups de la classe."; font-size: 11px; color: Palette.muted; }
+                                                HorizontalLayout {
+                                                    spacing: 8px;
+                                                    AppButton { text: "Créer une sauvegarde"; kind: 1; clicked => { root.backup-database(); } }
+                                                    AppButton { text: "Restaurer"; kind: 2; clicked => { root.restore-database(); } }
+                                                }
+                                            }
+                                        }
+                                        Rectangle {
+                                            width: 330px;
+                                            border-radius: 14px;
+                                            background: Palette.danger-soft;
+                                            border-width: 1px;
+                                            border-color: #E7C4BF;
+                                            VerticalLayout {
+                                                padding: 16px;
+                                                spacing: 8px;
+                                                Text { text: "Zone sensible"; font-family: "Lora"; font-size: 20px; color: Palette.danger; }
+                                                Text { text: "Vider les élèves, les notes et les matières de cette classe. Une sauvegarde est créée avant l'opération."; font-size: 11px; color: Palette.text; }
+                                                AppButton { text: "Réinitialiser la classe"; kind: 3; clicked => { root.reset-class(); } }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Busy overlay
+                if root.busy : Rectangle {
+                    background: Palette.overlay-bg;
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 10px;
+                        Text { text: root.busy-label; color: Palette.white; font-size: 14px; horizontal-alignment: center; }
+                        Rectangle {
+                            width: 180px;
+                            height: 4px;
+                            border-radius: 2px;
+                            background: #FFFFFF33;
+                            Rectangle {
+                                width: 60px;
+                                height: 4px;
+                                border-radius: 2px;
+                                background: Palette.gold;
+                                animate x { duration: 900ms; iteration-count: 1000; }
+                            }
+                        }
+                    }
+                }
+
+                if root.status-message != "" : Toast {
+                    message: root.status-message;
+                    kind: root.status-kind;
+                    win-width: root.width;
+                    win-height: root.height;
+                }
+
+                // =======================================================
+                // Dialogue À propos
+                // =======================================================
+                if root.show-about : Rectangle {
+                    background: #00000060;
+                    TouchArea {
+                        clicked => { root.show-about = false; }
+                    }
+                    Rectangle {
+                        width: 460px;
+                        height: about-layout.preferred-height + 40px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 20px;
+                        background: Palette.surface;
+                        border-width: 1px;
+                        border-color: Palette.line;
+                        drop-shadow-blur: 40px;
+                        drop-shadow-color: #00000044;
+                        drop-shadow-offset-y: 8px;
+
+                        about-layout := VerticalLayout {
+                            padding: 32px;
+                            spacing: 14px;
+                            alignment: center;
+
+                            Text {
+                                text: "BULLETIN";
+                                font-family: "Lora";
+                                font-size: 36px;
+                                font-weight: 600;
+                                color: Palette.ink;
+                                horizontal-alignment: center;
+                                letter-spacing: 3px;
+                            }
+                            Text {
+                                text: "Registre scolaire";
+                                font-size: 13px;
+                                color: Palette.muted;
+                                horizontal-alignment: center;
+                                letter-spacing: 1.5px;
+                            }
+                            Rectangle { height: 1px; background: Palette.line; }
+                            Text {
+                                text: "Version " + root.app-version;
+                                font-family: "IBM Plex Mono";
+                                font-size: 14px;
+                                color: Palette.ink;
+                                horizontal-alignment: center;
+                            }
+                            Text {
+                                text: "Gestion des notes, moyennes, classements\net bulletins scolaires.\n\nApplication native construite avec Rust et Slint.";
+                                font-size: 12px;
+                                color: Palette.muted;
+                                horizontal-alignment: center;
+                                wrap: word-wrap;
+                            }
+                            Rectangle { height: 1px; background: Palette.line; }
+                            AppButton {
+                                text: "Fermer";
+                                kind: 0;
+                                clicked => { root.show-about = false; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ========================================================================
+// Dialogue d'import avec aperçu (élèves)
+// ========================================================================
+
+component ImportPreviewDialog inherits Window {
+    title: "Import élèves — Aperçu";
+    width: 700px;
+    height: 500px;
+    background: Palette.paper;
+
+    in property <string> file-path: "";
+    in-out property <bool> open: false;
+    callback import-confirmed();
+    callback cancelled();
+
+    // Données des élèves à importer (format : "num | nom | prénoms | statut")
+    in property <[string]> preview-lines;
+    in property <int> preview-count: 0;
+    in property <int> preview-new: 0;
+    in property <int> preview-doubles: 0;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+
+        if !root.open : Rectangle {
+            height: parent.height;
+            VerticalLayout {
+                alignment: center;
+                spacing: 12px;
+                Text {
+                    text: "Aucun fichier sélectionné.";
+                    color: Palette.muted;
+                    font-size: 14px;
+                }
+                AppButton {
+                    text: "Choisir un fichier XLSX…";
+                    kind: 1;
+                    clicked => { root.import-confirmed(); }
+                }
+            }
+        }
+
+        if root.open && root.preview-count > 0 : VerticalLayout {
+            spacing: 10px;
+
+            // Fichier sélectionné
+            Text {
+                text: "Fichier : " + root.file-path;
+                font-size: 12px;
+                color: Palette.muted;
+                overflow: elide;
+            }
+
+            // Résumé
+            HorizontalLayout {
+                spacing: 12px;
+                Kpi {
+                    value: "" + root.preview-new;
+                    label: "NOUVEAUX";
+                    tone: Palette.teal;
+                    horizontal-stretch: 1;
+                }
+                Kpi {
+                    value: "" + root.preview-doubles;
+                    label: "DOUBLONS";
+                    tone: Palette.gold;
+                    horizontal-stretch: 1;
+                }
+                Kpi {
+                    value: "" + root.preview-count;
+                    label: "TOTAL";
+                    tone: Palette.ink;
+                    horizontal-stretch: 1;
+                }
+            }
+
+            // Liste des élèves
+            ScrollView {
+                height: 240px;
+                VerticalLayout {
+                    spacing: 2px;
+                    for line in root.preview-lines : Text {
+                        text: line;
+                        font-family: "IBM Plex Mono";
+                        font-size: 11px;
+                        overflow: elide;
+                        color: Palette.text;
+                    }
+                }
+            }
+
+            // Actions
+            HorizontalLayout {
+                Rectangle { horizontal-stretch: 1; }
+                AppButton {
+                    text: "Annuler";
+                    kind: 2;
+                    clicked => { root.cancelled(); }
+                }
+                AppButton {
+                    text: "Importer les élèves";
+                    kind: 0;
+                    clicked => { root.import-confirmed(); }
+                }
+            }
+        }
+
+        if root.open && root.preview-count == 0 : VerticalLayout {
+            alignment: center;
+            spacing: 12px;
+            Text {
+                text: "Aucun élève exploitable trouvé dans le fichier.";
+                color: Palette.muted;
+                font-size: 14px;
+            }
+            AppButton {
+                text: "Choisir un autre fichier";
+                kind: 1;
+                clicked => { root.import-confirmed(); }
+            }
+            AppButton {
+                text: "Annuler";
+                kind: 2;
+                clicked => { root.cancelled(); }
+            }
+        }
+    }
+}
+
+// ========================================================================
+// Wizard Création de Classe (7 étapes)
+// ========================================================================
+
+component ClassWizardDialog inherits Window {
+    title: "Assistant — Création d'une nouvelle classe";
+    width: 700px;
+    height: 560px;
+    background: Palette.paper;
+
+    in-out property <bool> open: false;
+    callback finished(dict);
+    callback cancelled();
+
+    // État du wizard
+    private property <int> current-step: 0;
+    private property <string> section: "";
+    private property <string> level: "";
+    private property <int> count: 1;
+    private property <string> pattern: "numeric";
+    private property <string> custom-suffixes: "";
+    private property <[string]> sub-class-names: [];
+    // Données des sections (venues du Rust via callbacks)
+    in property <[dict]> sections-data: [];
+    in property <[dict]> levels-data: [];
+    in property <[dict]> subjects-data: [];
+    in property <[dict]> subjects-table: [];
+    in property <[dict]> students-table: [];
+    private property <int> pattern-index: 0;
+    private property <int> current-sub-class: 0;
+    private property <bool> can-advance: false;
+
+    VerticalLayout {
+        padding: 0;
+        spacing: 0;
+
+        // Header avec progression
+        Rectangle {
+            height: 60px;
+            background: Palette.primary;
+            HorizontalLayout {
+                padding: 16px;
+                spacing: 12px;
+                Text {
+                    text: "Assistant — Création de classe";
+                    font-family: "Lora";
+                    font-size: 22px;
+                    font-weight: 600;
+                    color: Palette.on_primary;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: "Étape " + (root.current-step + 1) + " / 7";
+                    color: Palette.on_primary;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+            }
+        }
+
+        // Barre de progression étapes
+        Rectangle {
+            height: 4px;
+            background: Palette.primary_container;
+            Rectangle {
+                width: (root.current-step + 1) * parent.width / 7;
+                height: parent.height;
+                background: Palette.gold;
+            }
+        }
+
+        // Contenu de l'étape courante
+        Rectangle {
+            background: Palette.surface;
+            VerticalLayout {
+                padding: 24px;
+                spacing: 16px;
+
+                // --- ÉTAPE 1 : SECTION ---
+                if root.current-step == 0 : VerticalLayout {
+                    spacing: 12px;
+                    Text {
+                        text: "Choisissez la section de la classe à créer.";
+                        color: Palette.muted;
+                        font-size: 13px;
+                    }
+                    VerticalLayout {
+                        spacing: 8px;
+                        for section in root.sections-data : Rectangle {
+                            background: section.selected ? Palette.primary_container : Palette.surface;
+                            border-radius: 10px;
+                            border-width: section.selected ? 2px : 1px;
+                            border-color: section.selected ? Palette.primary : Palette.line;
+                            TouchArea {
+                                clicked => {
+                                    root.section = section.key;
+                                }
+                            }
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                Rectangle {
+                                    width: 20px; height: 20px;
+                                    border-radius: 10px;
+                                    border-width: 2px;
+                                    border-color: section.selected ? Palette.primary : Palette.outline;
+                                    background: section.selected ? Palette.primary : transparent;
+                                }
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    Text {
+                                        text: section.label;
+                                        font-weight: 600;
+                                        color: Palette.ink;
+                                    }
+                                    Text {
+                                        text: section.description;
+                                        font-size: 11px;
+                                        color: Palette.muted;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- ÉTAPE 2 : NIVEAU ---
+                if root.current-step == 1 : VerticalLayout {
+                    spacing: 12px;
+                    Text {
+                        text: "Choisissez le niveau de la classe.";
+                        color: Palette.muted;
+                        font-size: 13px;
+                    }
+                    Text {
+                        text: "Section : " + root.section;
+                        color: Palette.primary;
+                        font-weight: 600;
+                    }
+                    VerticalLayout {
+                        spacing: 8px;
+                        for level-data in root.levels-data : Rectangle {
+                            background: level-data.selected ? Palette.primary_container : Palette.surface;
+                            border-radius: 10px;
+                            border-width: level-data.selected ? 2px : 1px;
+                            border-color: level-data.selected ? Palette.primary : Palette.line;
+                            TouchArea {
+                                clicked => { root.level = level-data.key; }
+                            }
+                            HorizontalLayout {
+                                padding: 16px;
+                                spacing: 12px;
+                                Rectangle {
+                                    width: 20px; height: 20px;
+                                    border-radius: 10px;
+                                    border-width: 2px;
+                                    border-color: level-data.selected ? Palette.primary : Palette.outline;
+                                    background: level-data.selected ? Palette.primary : transparent;
+                                }
+                                VerticalLayout {
+                                    Text {
+                                        text: level-data.label;
+                                        font-weight: 600;
+                                        color: Palette.ink;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- ÉTAPE 3 : SOUS-CLASSES ---
+                if root.current-step == 2 : VerticalLayout {
+                    spacing: 16px;
+                    Text {
+                        text: "Combien de sous-classes et quel pattern de nommage ?";
+                        color: Palette.muted;
+                    }
+                    GroupBox {
+                        title: "Nombre de sous-classes";
+                        HorizontalLayout {
+                            spacing: 12px;
+                            SpinBox {
+                                value: root.count;
+                                minimum: 1;
+                                maximum: 20;
+                                width: 80px;
+                            }
+                        }
+                    }
+                    GroupBox {
+                        title: "Pattern de nommage";
+                        VerticalLayout {
+                            spacing: 8px;
+                            ComboBox {
+                                items: ["Numérique (1, 2, 3…)", "Romain (I, II, III…)", "Alphabétique (A, B, C…)", "Personnalisé"];
+                                current_index: root.pattern-index;
+                            }
+                            if root.pattern == "custom" : TextInput {
+                                text <=> root.custom-suffixes;
+                                placeholder: "Ex: LI, LII, S (séparés par des virgules)";
+                            }
+                        }
+                    }
+                    // Aperçu
+                    GroupBox {
+                        title: "Aperçu des noms";
+                        VerticalLayout {
+                            for name in root.sub-class-names : Text {
+                                text: "  " + name;
+                                font-family: "IBM Plex Mono";
+                                color: Palette.ink;
+                            }
+                        }
+                    }
+                }
+
+                // --- ÉTAPE 4 : DÉTAILS CLASSES ---
+                if root.current-step == 3 : VerticalLayout {
+                    spacing: 16px;
+                    Text {
+                        text: "Renseignez les détails de chaque sous-classe.";
+                        color: Palette.muted;
+                    }
+                    GroupBox {
+                        title: "Paramètres généraux";
+                        VerticalLayout {
+                            spacing: 10px;
+                            HorizontalLayout { spacing: 10px;
+                                Field { label: "Établissement"; text: "Lycée Saint Joseph"; horizontal-stretch: 2; }
+                                Field { label: "Année scolaire"; text: "2025-2026"; horizontal-stretch: 1; }
+                            }
+                        }
+                    }
+                    for i in 0..root.sub-class-names.length : GroupBox {
+                        title: "Sous-classe " + root.sub-class-names[i];
+                        VerticalLayout {
+                            spacing: 10px;
+                            HorizontalLayout { spacing: 10px;
+                                Field { label: "Nom complet"; text: root.sub-class-names[i]; horizontal-stretch: 2; }
+                                Field { label: "Prof responsable"; text: ""; horizontal-stretch: 2; }
+                                SpinBox { value: 40; minimum: 0; maximum: 200; label: "Effectif"; width: 80px; }
+                                SpinBox { value: 20; minimum: 0; maximum: 200; label: "Filles"; width: 80px; }
+                                SpinBox { value: 20; minimum: 0; maximum: 200; label: "Garçons"; width: 80px; }
+                            }
+                        }
+                    }
+                }
+
+                // --- ÉTAPE 5 : MATIÈRES ---
+                if root.current-step == 4 : VerticalLayout {
+                    spacing: 16px;
+                    Text {
+                        text: "Cochez les matières enseignées. Vous pourrez ajuster les coefficients à l'étape suivante.";
+                        color: Palette.muted;
+                    }
+                    ScrollView {
+                        height: 280px;
+                        VerticalLayout {
+                            spacing: 6px;
+                            for subject in root.subjects-data : CheckBox {
+                                text: subject.name + "  (coeff. recommandé : " + subject.coeff + ")";
+                                checked: subject.selected;
+                            }
+                        }
+                    }
+                }
+
+                // --- ÉTAPE 6 : COEFFICIENTS ---
+                if root.current-step == 5 : VerticalLayout {
+                    spacing: 16px;
+                    Text {
+                        text: "Ajustez les coefficients de chaque matière.";
+                        color: Palette.muted;
+                    }
+                    DataTable {
+                        headers: ["Matière", "Coefficient", "Enseignant"];
+                        widths: [300px, 120px, 200px];
+                        rows: root.subjects-table;
+                        height: 280px;
+                    }
+                }
+
+                // --- ÉTAPE 7 : ÉLÈVES ---
+                if root.current-step == 6 : VerticalLayout {
+                    spacing: 16px;
+                    Text {
+                        text: "Générez ou éditez la liste des élèves pour chaque sous-classe.";
+                        color: Palette.muted;
+                    }
+                    HorizontalLayout { spacing: 10px;
+                        ComboBox {
+                            items: root.sub-class-names;
+                            current_index: root.current-sub-class;
+                        }
+                    }
+                    DataTable {
+                        headers: ["N°", "Matricule", "Nom", "Prénoms"];
+                        widths: [50px, 120px, 200px, 200px];
+                        rows: root.students-table;
+                        height: 240px;
+                    }
+                    HorizontalLayout { spacing: 10px;
+                        AppButton { text: "+ Ajouter ligne"; kind: 1; }
+                        AppButton { text: "Supprimer ligne"; kind: 3; }
+                    }
+                }
+            }
+        }
+
+        // Navigation
+        Rectangle {
+            height: 60px;
+            background: Palette.surface;
+            border-width: 1px;
+            border-color: Palette.line;
+            HorizontalLayout {
+                padding: 16px;
+                spacing: 12px;
+                AppButton {
+                    text: "Précédent";
+                    kind: 2;
+                    enabled: root.current-step > 0;
+                    clicked => { root.current-step = root.current-step - 1; }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                if root.current-step < 6 : AppButton {
+                    text: "Suivant";
+                    kind: 1;
+                    enabled: root.can-advance;
+                    clicked => { root.current-step = root.current-step + 1; }
+                }
+                if root.current-step == 6 : AppButton {
+                    text: "Créer les classes";
+                    kind: 0;
+                    clicked => { root.finished({}); }
+                }
+                AppButton {
+                    text: "Annuler";
+                    kind: 2;
+                    clicked => { root.cancelled(); }
+                }
+            }
+        }
+    }
+}

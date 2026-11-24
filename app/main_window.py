@@ -204,7 +204,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(self._btn_sync)
 
         self._btn_export = QPushButton(
-            qta.icon("fa5s.file-export"), " Exporter"
+            qta.icon("fa5s.file-export"), " Export matiere"
         )
         set_kind(self._btn_export, "tonal")
         self._btn_export.setToolTip("Exporter les feuilles des professeurs")
@@ -212,6 +212,18 @@ class MainWindow(QMainWindow):
         self._btn_export.setMinimumHeight(32)
         self._btn_export.clicked.connect(self._action_export_profs)
         lay.addWidget(self._btn_export)
+
+        self._btn_export_all = QPushButton(
+            qta.icon("fa5s.file-download"), " Exporter tout"
+        )
+        set_kind(self._btn_export_all, "filled")
+        self._btn_export_all.setToolTip(
+            "Exporter matières, totaux, moyennes et compte rendu"
+        )
+        self._btn_export_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_export_all.setMinimumHeight(32)
+        self._btn_export_all.clicked.connect(self._action_export_all_results)
+        lay.addWidget(self._btn_export_all)
 
 
 
@@ -275,11 +287,18 @@ class MainWindow(QMainWindow):
         m_file.addSeparator()
 
         act_export = QAction(
-            qta.icon("fa5s.file-export"), "Exporter les feuilles des professeurs…", self
+            qta.icon("fa5s.file-export"), "Export matiere", self
         )
         act_export.setShortcut("Ctrl+E")
         act_export.triggered.connect(self._action_export_profs)
         m_file.addAction(act_export)
+
+        act_export_all = QAction(
+            qta.icon("fa5s.file-download"), "Exporter tout (matières + résultats)…", self
+        )
+        act_export_all.setShortcut("Ctrl+Shift+E")
+        act_export_all.triggered.connect(self._action_export_all_results)
+        m_file.addAction(act_export_all)
 
         m_file.addSeparator()
 
@@ -891,6 +910,405 @@ class MainWindow(QMainWindow):
             return
         self.lbl_status.setText(f"Export profs : {n} feuilles")
         show_toast(self, f"{n} feuille(s) exportée(s) dans {folder}", kind="success")
+
+    # -- Export All Results --
+    def _export_class_all_results(
+        self, db: Database, class_info: "ClassInfo", base_dir: Path,
+    ) -> int:
+        """Exporte totaux, moyennes et compte rendu d'une classe.
+
+        Structure créée :
+            <base_dir>/<ClassName>/
+                Matieres/
+                    Anglais.xlsx, Français.xlsx …
+                Totalisation/
+                    totalisation1.xlsx … totalisation6.xlsx
+                Moyennes/
+                    Moyenne_T1.xlsx, Moyenne_T2.xlsx, Moyenne_T3.xlsx
+                    Moyenne_Annuelle.xlsx
+                Compte_Rendu/
+                    compte_rendu_trimestres.pdf
+
+        Retourne le nombre de fichiers exportés.
+        """
+        import openpyxl
+        from openpyxl.styles import Alignment, Font, PatternFill
+
+        from .models import (
+            compute_annuelle,
+            compute_stats,
+            compute_totalisation,
+            compute_trimestre,
+            load_subjects,
+        )
+        from .widgets.table_helpers import fmt_value, label_for_exam
+
+        subjects = load_subjects(db)
+        students_raw = db.list_students()
+        if not subjects or not students_raw:
+            return 0
+
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill("solid", fgColor="4F46E5")
+        title_font = Font(bold=True, size=14)
+
+        etab = db.get_setting("etablissement", "")
+        classe = db.get_setting("classe", class_info.display_name)
+        annee = db.get_setting("annee_scolaire", "")
+
+        class_dir = base_dir / class_info.name
+        exported = 0
+
+        # ── Matières (feuilles profs) ──────────────────────────────
+        mat_dir = class_dir / "Matieres"
+        mat_dir.mkdir(parents=True, exist_ok=True)
+        nb_ex = int(db.get_setting("nb_examens", "6") or 6)
+        for s in subjects:
+            wb_m = openpyxl.Workbook()
+            ws_m = wb_m.active
+            ws_m.title = s.name[:31]
+
+            ws_m["B2"] = etab
+            ws_m["B2"].font = Font(bold=True, size=14)
+            ws_m["E2"] = f"Matière : {s.name}"
+            ws_m["E2"].font = Font(bold=True, size=12)
+            ws_m["B3"] = f"Classe : {classe}"
+            ws_m["C3"] = f"Coef : {s.coeff:g}"
+            ws_m["F3"] = f"Prof : {s.teacher or '—'}"
+            ws_m["B4"] = f"Année scolaire : {annee}"
+            ws_m["B4"].font = Font(italic=True, color="666666")
+
+            mat_headers = ["N°", "Nom et Prénoms"]
+            for n in range(1, nb_ex + 1):
+                label, _ = label_for_exam(n)
+                mat_headers.append(label)
+            for c, h in enumerate(mat_headers, 1):
+                cell = ws_m.cell(row=6, column=c, value=h)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal="center")
+
+            for r, st_raw in enumerate(students_raw, 7):
+                ws_m.cell(row=r, column=1, value=st_raw["num"])
+                full = f"{st_raw['nom']} {st_raw['prenoms'] if 'prenoms' in st_raw.keys() else ''}".strip()
+                ws_m.cell(row=r, column=2, value=full)
+                for n in range(1, nb_ex + 1):
+                    v = db.get_grade(st_raw["id"], s.id, n)
+                    if v is not None:
+                        ws_m.cell(row=r, column=2 + n, value=v)
+
+            ws_m.column_dimensions["A"].width = 5
+            ws_m.column_dimensions["B"].width = 30
+            for n in range(1, nb_ex + 1):
+                ws_m.column_dimensions[openpyxl.utils.get_column_letter(2 + n)].width = 12
+
+            safe_name = "".join(
+                c if c.isalnum() or c in " -_." else "_"
+                for c in s.name
+            ).strip()
+            wb_m.save(mat_dir / f"{safe_name}.xlsx")
+            exported += 1
+
+        # ── Totalisation (6 fichiers) ──────────────────────────────
+        tot_dir = class_dir / "Totalisation"
+        tot_dir.mkdir(parents=True, exist_ok=True)
+        for n in range(1, 7):
+            rows, subjs, total_coeff = compute_totalisation(db, n)
+            lbl_exam, _ = label_for_exam(n)
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = f"totalisation{n}"
+
+            ws["A1"] = etab
+            ws["A1"].font = title_font
+            ws["B2"] = f"Matière : RELEVE DE NOTES"
+            ws["B2"].font = Font(bold=True, size=12)
+            ws["A2"] = f"Classe : {classe}"
+            ws["B3"] = f"Année : {annee}"
+            ws["A3"] = f"Examen : {lbl_exam}"
+            ws["A4"] = f"Coefficients totaux : {total_coeff:g}"
+
+            headers = ["N°", "Prénoms"]
+            for s in subjs:
+                headers.append(f"{s.name} ({s.coeff:g})")
+            headers.extend(["Total", "Moyenne", "Rang"])
+            for c, h in enumerate(headers, 1):
+                cell = ws.cell(row=6, column=c, value=h)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal="center")
+
+            for i, r in enumerate(rows):
+                row = 7 + i
+                ws.cell(row=row, column=1, value=r["student"].num)
+                ws.cell(row=row, column=2, value=r["student"].full_name)
+                for c, s in enumerate(subjs, 3):
+                    v = r["notes"].get(s.id)
+                    if v is not None:
+                        ws.cell(row=row, column=c, value=v)
+                if r["valid"]:
+                    ws.cell(row=row, column=3 + len(subjs), value=r["total"])
+                    ws.cell(row=row, column=4 + len(subjs), value=r["moy"])
+                    ws.cell(row=row, column=5 + len(subjs), value=r["rank"])
+                else:
+                    for c in range(3 + len(subjs), 6 + len(subjs)):
+                        ws.cell(row=row, column=c, value="NC")
+
+            ws.column_dimensions["A"].width = 5
+            ws.column_dimensions["B"].width = 25
+            for c in range(3, 3 + len(subjs)):
+                ws.column_dimensions[openpyxl.utils.get_column_letter(c)].width = 12
+            ws.column_dimensions[openpyxl.utils.get_column_letter(3 + len(subjs))].width = 10
+            ws.column_dimensions[openpyxl.utils.get_column_letter(4 + len(subjs))].width = 10
+            ws.column_dimensions[openpyxl.utils.get_column_letter(5 + len(subjs))].width = 6
+
+            wb.save(tot_dir / f"totalisation{n}.xlsx")
+            exported += 1
+
+        # ── Moyennes (4 fichiers) ──────────────────────────────────
+        moy_dir = class_dir / "Moyennes"
+        moy_dir.mkdir(parents=True, exist_ok=True)
+
+        for t in (1, 2, 3):
+            trim_rows = compute_trimestre(db, t)
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = f"Moyenne T{t}"
+
+            ws["A1"] = etab
+            ws["A1"].font = title_font
+            ws["A2"] = f"Classe : {classe}  —  Année : {annee}"
+            ws["A3"] = f"MOYENNES TRIMESTRE {t}"
+            ws["A3"].font = Font(bold=True, size=12)
+
+            headers = [
+                "N°", "Prénoms", "M.J. (×1)", "Comp. (×2)",
+                "Total M.J", "Total C", "Total/40", "Moyenne/20", "Rang"
+            ]
+            for c, h in enumerate(headers, 1):
+                cell = ws.cell(row=5, column=c, value=h)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal="center")
+
+            for i, r in enumerate(trim_rows):
+                row = 6 + i
+                ws.cell(row=row, column=1, value=r.student.num)
+                ws.cell(row=row, column=2, value=r.student.full_name)
+                for c, val in enumerate([r.m_moy, r.c_moy, r.m_total, r.c_total, r.tot, r.moy], 3):
+                    ws.cell(row=row, column=c, value=fmt_value(val))
+                ws.cell(row=row, column=9, value=str(r.rank) if r.rank else "NC")
+
+            ws.column_dimensions["A"].width = 5
+            ws.column_dimensions["B"].width = 25
+            for c in range(3, 10):
+                ws.column_dimensions[openpyxl.utils.get_column_letter(c)].width = 12
+
+            wb.save(moy_dir / f"Moyenne_T{t}.xlsx")
+            exported += 1
+
+        # Annuelle
+        ann_rows = compute_annuelle(db)
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Moyenne Annuelle"
+
+        ws["A1"] = etab
+        ws["A1"].font = title_font
+        ws["A2"] = f"Classe : {classe}  —  Année : {annee}"
+        ws["A3"] = "MOYENNES ANNUELLES"
+        ws["A3"].font = Font(bold=True, size=12)
+
+        headers = [
+            "N°", "Prénoms",
+            "M.J.1", "Comp.1", "M.J.2", "Comp.2", "M.J.3", "Comp.3",
+            "TOTAL/120", "MGA/20", "Rang"
+        ]
+        for c, h in enumerate(headers, 1):
+            cell = ws.cell(row=5, column=c, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center")
+
+        for i, r in enumerate(ann_rows):
+            row = 6 + i
+            ws.cell(row=row, column=1, value=r.student.num)
+            ws.cell(row=row, column=2, value=r.student.full_name)
+            for c, val in enumerate([r.mj1, r.co1, r.mj2, r.co2, r.mj3, r.co3], 3):
+                ws.cell(row=row, column=c, value=fmt_value(val))
+            ws.cell(row=row, column=9, value=fmt_value(r.total))
+            ws.cell(row=row, column=10, value=fmt_value(r.mga))
+            ws.cell(row=row, column=11, value=str(r.rank) if r.rank else "NC")
+
+        ws.column_dimensions["A"].width = 5
+        ws.column_dimensions["B"].width = 25
+        for c in range(3, 12):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(c)].width = 12
+
+        wb.save(moy_dir / "Moyenne_Annuelle.xlsx")
+        exported += 1
+
+        # ── Compte Rendu (1 PDF) ───────────────────────────────────
+        cr_dir = class_dir / "Compte_Rendu"
+        cr_dir.mkdir(parents=True, exist_ok=True)
+        pdf_path = cr_dir / "compte_rendu_trimestres.pdf"
+
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import cm
+        from reportlab.platypus import (
+            Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+        )
+
+        styles = getSampleStyleSheet()
+        doc = SimpleDocTemplate(str(pdf_path), pagesize=A4,
+                                topMargin=2 * cm, bottomMargin=2 * cm)
+        elems = []
+        elems.append(Paragraph(f"<b>{etab}</b>", styles["Title"]))
+        elems.append(Paragraph("COMPTE RENDU TRIMESTRES", styles["Heading2"]))
+        elems.append(Paragraph(
+            f"Classe : {classe} — Année : {annee}",
+            styles["Normal"],
+        ))
+        elems.append(Spacer(1, 0.5 * cm))
+
+        for t in (1, 2, 3):
+            n_mj = 2 * t - 1
+            n_co = 2 * t
+            stats_mj = compute_stats(db, n_mj)
+            stats_co = compute_stats(db, n_co)
+            lbl_mj = label_for_exam(n_mj)[0]
+            lbl_co = label_for_exam(n_co)[0]
+
+            elems.append(Paragraph(
+                f"<b>Trimestre {t} — {lbl_mj} + {lbl_co}</b>",
+                styles["Heading3"],
+            ))
+
+            def _fmt_avg(v):
+                return f"{v:.2f}" if v is not None else "NC"
+
+            moy_mj = stats_mj.moyenne_classe
+            moy_co = stats_co.moyenne_classe
+            classes_ens = max(stats_mj.classes, stats_co.classes)
+            data = [
+                ["Indicateur", lbl_mj, lbl_co, "Ensemble"],
+                ["Effectif",
+                 str(stats_mj.effectif), str(stats_co.effectif),
+                 str(stats_mj.effectif)],
+                ["Classés",
+                 str(stats_mj.classes), str(stats_co.classes),
+                 str(classes_ens)],
+                ["Moyenne classe",
+                 _fmt_avg(moy_mj), _fmt_avg(moy_co),
+                 _fmt_avg((moy_mj + moy_co) / 2
+                          if moy_mj is not None and moy_co is not None
+                          else moy_mj or moy_co)],
+            ]
+            t1 = Table(data, colWidths=[4 * cm, 3 * cm, 3 * cm, 3 * cm])
+            t1.setStyle(TableStyle([
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ]))
+            elems.append(t1)
+            elems.append(Spacer(1, 0.2 * cm))
+
+            elems.append(Paragraph("<b>Élèves ≥ 10/20 par matière</b>", styles["Heading4"]))
+            data2 = [["Matière", lbl_mj, lbl_co, "Ensemble"]]
+            for s in subjects:
+                n_mj_val = stats_mj.nb_above_avg_per_subject.get(s.id, 0)
+                n_co_val = stats_co.nb_above_avg_per_subject.get(s.id, 0)
+                data2.append([s.name, str(n_mj_val), str(n_co_val),
+                              str(max(n_mj_val, n_co_val))])
+            t2 = Table(data2, colWidths=[4 * cm, 3 * cm, 3 * cm, 3 * cm])
+            t2.setStyle(TableStyle([
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ]))
+            elems.append(t2)
+            elems.append(Spacer(1, 0.5 * cm))
+
+        doc.build(elems)
+        exported += 1
+
+        return exported
+
+    def _action_export_all_results(self) -> None:
+        """Exporte totaux, moyennes et compte rendu — une classe ou toutes."""
+        cls = discover_class_by_db_path(self.db.path)
+
+        if cls is None:
+            # Accueil → exporter toutes les classes
+            from .workspace import discover_classes, get_global_config, set_global_config
+            from qtpy.QtWidgets import QFileDialog
+
+            saved = get_global_config("export_all_results_global_path", str(Path.home()))
+            chosen = QFileDialog.getExistingDirectory(
+                self,
+                "Dossier de destination pour l'export global",
+                saved,
+            )
+            if not chosen:
+                return
+            export_dir = Path(chosen)
+            set_global_config("export_all_results_global_path", chosen)
+
+            all_classes = discover_classes()
+            if not all_classes:
+                show_toast(self, "Aucune classe trouvée.", "info")
+                return
+
+            overlay = ProgressOverlay(self, "Export global des résultats…")
+            overlay.start()
+            total = 0
+            per_class: list[str] = []
+            for info in all_classes:
+                db = Database(str(info.db_path))
+                try:
+                    n = self._export_class_all_results(db, info, export_dir)
+                    n += self._export_class_profs(db, info, out_dir=export_dir)
+                    total += n
+                    per_class.append(f"  {info.display_name} : {n} fichier(s)")
+                except Exception as exc:
+                    log.exception("Export all results failed for %s", info.name)
+                    per_class.append(f"  {info.display_name} : erreur — {exc}")
+                finally:
+                    db.close()
+            overlay.stop()
+
+            self.lbl_status.setText(f"Export global résultats : {total} fichier(s)")
+            show_toast(self, f"Résultats exportés pour {len(all_classes)} classe(s) dans {chosen}", "success")
+            return
+
+        # Classe unique
+        from .widgets.export_settings import ensure_export_dir
+        from qtpy.QtWidgets import QFileDialog
+
+        out_dir = ensure_export_dir(self.db, "export_totalisation_path")
+        folder = QFileDialog.getExistingDirectory(
+            self, "Dossier de destination pour l'export", str(out_dir),
+        )
+        if not folder:
+            return
+
+        overlay = ProgressOverlay(self, "Export des résultats…")
+        overlay.start()
+        try:
+            n = self._export_class_all_results(self.db, cls, Path(folder))
+            n += self._export_class_profs(self.db, cls, out_dir=Path(folder))
+            if n == 0:
+                show_toast(self, "Aucune donnée à exporter.", "info")
+                return
+            self.lbl_status.setText(f"Export résultats : {cls.display_name} — {n} fichier(s)")
+            show_toast(self, f"Résultats exportés dans {folder}/{cls.name}/", "success")
+        except Exception as e:
+            log.exception("Export all results failed")
+            show_toast(self, "Erreur lors de l'export. Vérifiez que le fichier n'est pas ouvert.", "error")
+        finally:
+            overlay.stop()
 
     def _action_sync_settings(self) -> None:
         """Dialogue des paramètres de synchronisation."""

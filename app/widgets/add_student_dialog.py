@@ -245,6 +245,18 @@ class AddStudentDialog(QDialog):
             self.ed_num.setFocus()
             return
 
+        # Vérifier l'unicité du nom + prénoms
+        dup = self.db.find_duplicate_name(nom, prenoms)
+        if dup is not None:
+            QMessageBox.warning(
+                self, self.windowTitle(),
+                f"Un élève avec le même nom existe déjà :\n"
+                f"« {dup['nom']} {dup['prenoms']} » (N°{dup['num']}).\n\n"
+                "Veuillez modifier le nom ou les prénoms."
+            )
+            self.ed_nom.setFocus()
+            return
+
         # Insertion
         try:
             self.db.add_student(

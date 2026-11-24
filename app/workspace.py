@@ -35,7 +35,9 @@ DIVISIONS: tuple[str, ...] = ("COLLEGE", "LYCEE", "PRIMAIRE")
 # que si la classe correspond au pattern.
 _SUBJECT_LEVEL_RULES: dict[str, str] = {
     # Philosophie : seulement Première et Terminale (pas Seconde, pas Collège)
-    "philosophie": r"^(1ere|1ère|1e?re?l|1e?re?s|t[ae]?|td)",
+    # Supporte les suffixes en chiffres romains (I, II, III…) ET arabes (1, 2, 3…)
+    # Exemples : 1ereLI, 1èreLI, 1eres, TAI, TAII, TA1, TA2, TD, TLE, TLEI
+    "philosophie": r"^(1ere|1ère|1e?re?[ls]?\d*|tle|tale|t[ae]?[a-z]?\d*)",
 }
 
 
@@ -84,15 +86,17 @@ class ClassInfo:
         est insensible à la casse et aux accents).
         """
         target = _normalize(subject_name)
+        aliases = _get_subject_aliases(target)
         for p in self.subject_files:
-            if _normalize(p.stem) == target:
+            if _normalize(p.stem) in aliases:
                 return p
         # Fallback : nom tel quel, l'import lèvera une erreur claire.
         return self.folder / f"{subject_name}.xlsx"
 
     def has_subject(self, subject_name: str) -> bool:
         target = _normalize(subject_name)
-        return any(_normalize(p.stem) == target for p in self.subject_files)
+        aliases = _get_subject_aliases(target)
+        return any(_normalize(p.stem) in aliases for p in self.subject_files)
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +114,30 @@ def _normalize(text: str) -> str:
     s = re.sub(r"[^a-z0-9 ]+", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
+
+
+# ---------------------------------------------------------------------------
+# Aliases de matières : correspondances entre noms de sujets (base)
+# et noms de fichiers .xlsx (disque).
+# Clé = nom normalisé du sujet dans la base, Valeur = liste des noms
+# normalisés alternatifs (noms de fichiers possibles).
+# ---------------------------------------------------------------------------
+_SUBJECT_ALIASES: dict[str, list[str]] = {
+    # "education a la vie" (base) ↔ "eva" (fichier EVA.xlsx)
+    "education a la vie": ["eva"],
+    # "histoire geographie" (base) ↔ "histo geo" (fichier Histo-geo.xlsx)
+    "histoire geographie": ["histo geo"],
+    # Alias inverses pour la détection depuis les fichiers
+    "eva": ["education a la vie"],
+    "histo geo": ["histoire geographie"],
+}
+
+
+def _get_subject_aliases(normalized_name: str) -> list[str]:
+    """Retourne tous les noms normalisés possibles pour un sujet,
+    y compris le nom lui-même et ses alias."""
+    aliases = _SUBJECT_ALIASES.get(normalized_name, [])
+    return [normalized_name] + aliases
 
 
 # ---------------------------------------------------------------------------
@@ -282,11 +310,14 @@ def _is_subject_excluded(subject_name: str, class_name_lower: str) -> bool:
 # ---------------------------------------------------------------------------
 def read_coefficient_from_xlsx(path: Path) -> float | None:
     """Lit le coefficient dans un fichier ``.xlsx`` de matière.
-    
+
     Le coefficient est stocké en cellule **C4** (ligne 4, colonne 3)
     du premier onglet du fichier.
-    
-    Retourne le coefficient, ou ``None`` si la lecture échoue.
+
+    Retourne le coefficient, ou ``None`` si la lecture échoue (fichier
+    absent, cellule vide, format invalide). ``None`` permet à l'appelant
+    de retomber sur le coefficient par défaut de la classe plutôt que
+    de silencieusement appliquer 1.0.
     """
     try:
         import openpyxl
@@ -372,10 +403,11 @@ def get_bulletin_excel_coeff(
     if mat_dir is None:
         return None
     norm_subj = _normalize(subject_name)
+    aliases = _get_subject_aliases(norm_subj)
     for p in sorted(mat_dir.glob("*.xlsx")):
         if p.name.startswith("~$"):
             continue
-        if _normalize(p.stem) == norm_subj:
+        if _normalize(p.stem) in aliases:
             return read_coefficient_from_xlsx(p)
     return None
 
@@ -390,7 +422,12 @@ def detect_subjects_from_xlsx(class_info: ClassInfo) -> dict[str, Path]:
     """
     out: dict[str, Path] = {}
     for p in class_info.subject_files:
-        out[_normalize(p.stem)] = p
+        norm_stem = _normalize(p.stem)
+        out[norm_stem] = p
+        # Ajoute aussi les alias inverses (ex: "eva" → "education a la vie")
+        for alias in _get_subject_aliases(norm_stem):
+            if alias != norm_stem:
+                out[alias] = p
     return out
 
 
@@ -599,10 +636,11 @@ def normalize_class_name(raw: str) -> str:
     - Ponctuation et espaces remplacés
     - « 6e I » / « 6ème 1 » / « 6EME 1 » / « 6E I » → « 6EME1 »
     - « 1ère L1 » → « 1EREL1 »
-    - « 2nde II » → « 2NDEII »
+    - « 2nde II » → « 2NDE2 » (romain converti en arabe)
     - « T.A » / « T.A D » / « TAD » → « TAD »
-    - Le suffixe romain (I, II, III, IV, …) ou arabe (1, 2, 3) est
-      accolé au préfixe (EME, ERE, NDE) sans espace.
+    - Le suffixe romain (I, II, III, IV, …) est converti en chiffre
+      arabe (1, 2, 3) puis accolé au préfixe (EME, ERE, NDE) sans
+      espace, pour rester cohérent avec les dossiers existants.
 
     >>> normalize_class_name("6e I")
     '6EME1'
@@ -613,7 +651,7 @@ def normalize_class_name(raw: str) -> str:
     >>> normalize_class_name("1ère L1")
     '1EREL1'
     >>> normalize_class_name("2nde II")
-    '2NDEII'
+    '2NDE2'
     """
     s = _strip_accents(str(raw or "")).upper().strip()
     if not s:
@@ -702,6 +740,39 @@ def infer_division(class_name: str) -> str:
     return "COLLEGE"
 
 
+def extract_level_key(class_name: str) -> str:
+    """Extrait la clé de niveau depuis un nom de classe.
+
+    Exemples : 6EME1 → 6EME, 1ERELI → 1ERE, TLE2 → TLE, 2NDEA → 2NDE.
+    Retourne une chaîne vide si le niveau ne peut pas être déterminé.
+    """
+    n = normalize_class_name(class_name)
+    if not n:
+        return ""
+    # Primaire
+    m = re.match(r"^(CP|CE[12]|CM[12])", n)
+    if m:
+        return m.group(1)
+    # Collège
+    m = re.match(r"^([3-6]EME)", n)
+    if m:
+        return m.group(1)
+    # Lycée
+    m = re.match(r"^(2NDE|1ERE|TLE|TALE|TAI)", n)
+    if m:
+        raw = m.group(1)
+        return "TLE" if raw in ("TLE", "TALE", "TAI") else raw
+    # Terminale abrégé : T suivi de lettres (ex. TLEA → TLE, TALL → TLE)
+    m = re.match(r"^(T[A-Z]{1,3})", n)
+    if m:
+        return "TLE"
+    # Première abrégée : 1 suivi de lettres (ex. 1LI → 1ERE)
+    m = re.match(r"^1([A-Z]{1,4})\d*$", n)
+    if m:
+        return "1ERE"
+    return ""
+
+
 def create_class_folder(
     class_name: str,
     root: Optional[Path] = None,
@@ -760,12 +831,15 @@ def import_xlsx_sheet_to_class(
     """
     from .db import Database
     n_before = 0
+    n_after = 0
     db = Database(str(class_info.db_path))
     try:
         existing = db.list_students()
         n_before = len(existing)
         db.bulk_update_students(sheet.rows)
         n_after = len(db.list_students())
+    except ValueError as exc:
+        log.warning("Import XLSX vers %s ignoré : %s", class_info.name, exc)
     finally:
         db.close()
     return {

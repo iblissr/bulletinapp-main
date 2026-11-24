@@ -353,13 +353,7 @@ class SubjectGradesWidget(QWidget):
             self._refresh_avg(r)
         # Connexions : recalcul moyenne live + auto-save debouncé
         for r in range(self.table.rowCount()):
-            item = self.table.item(r, COL_N)
-            if item is None:
-                continue
-            sid_data = item.data(Qt.ItemDataRole.UserRole)
-            if sid_data is None:
-                continue
-            sid = int(sid_data)
+            sid = int(self.table.item(r, COL_N).data(Qt.ItemDataRole.UserRole))
             for n in range(1, self.nb_exams + 1):
                 spin = self.table.cellWidget(r, COL_NOTES_START + n - 1)
                 if spin:
